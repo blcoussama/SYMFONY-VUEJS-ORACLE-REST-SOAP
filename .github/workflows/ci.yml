@@ -1,0 +1,298 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHP_VERSION: "8.3"
+  PHP_EXTENSIONS: ctype, iconv, intl, mbstring, pdo_sqlite, pdo_pgsql, soap, zip
+  COMPOSER_NO_INTERACTION: "1"
+  # Aucun fichier .env n'est versionné : Symfony Runtime lit uniquement l'environnement.
+  APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+
+jobs:
+  quality:
+    name: Qualité (CS, PHPStan, lints, audit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      APP_ENV: dev
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/composer/files
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: composer validate
+        run: composer validate --strict --no-check-publish
+
+      - name: composer install
+        run: composer install --prefer-dist --no-progress
+
+      - name: PHP-CS-Fixer (dry-run)
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff --show-progress=none
+
+      - name: Préchauffage du conteneur Symfony (lu par phpstan-symfony)
+        run: php bin/console cache:warmup
+
+      - name: PHPStan (niveau 8)
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+
+      - name: Lints Symfony
+        run: |
+          php bin/console lint:container
+          php bin/console lint:yaml config --parse-tags
+          php bin/console lint:twig templates
+          php bin/console doctrine:schema:validate --skip-sync
+
+      - name: composer audit
+        run: composer audit --locked
+
+  tests-sqlite:
+    name: Tests PHPUnit (SQLite)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      APP_ENV: test
+      DATABASE_URL: "sqlite:///%kernel.project_dir%/var/ci_test.db"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+          tools: composer:v2
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/composer/files
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+      - run: composer install --prefer-dist --no-progress
+      - name: Migrations SQLite + schéma conforme au mapping
+        run: |
+          php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+          php bin/console doctrine:schema:validate
+      - name: PHPUnit
+        run: vendor/bin/phpunit
+
+  tests-postgresql:
+    name: Tests PHPUnit (PostgreSQL 17)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: netops
+          # Mot de passe factice : conteneur éphémère de la CI.
+          POSTGRES_PASSWORD: ci_only_postgres
+          POSTGRES_DB: netops_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U netops -d netops_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      DATABASE_URL: "postgresql://netops:ci_only_postgres@127.0.0.1:5432/netops_test?serverVersion=17&charset=utf8"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+          tools: composer:v2
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/composer/files
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+      - run: composer install --prefer-dist --no-progress
+      - name: Migrations PostgreSQL + schéma conforme au mapping
+        run: |
+          php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+          php bin/console doctrine:schema:validate
+      - name: PHPUnit
+        run: vendor/bin/phpunit
+
+  tests-oracle:
+    name: Tests PHPUnit (Oracle XE 21, oci8)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    services:
+      oracle:
+        image: gvenzl/oracle-xe:21-slim
+        env:
+          # Mots de passe factices : conteneur éphémère de la CI.
+          ORACLE_PASSWORD: ci_only_oracle
+          APP_USER: netops_test
+          APP_USER_PASSWORD: ci_only_test
+        ports:
+          - 1521:1521
+        options: >-
+          --health-cmd healthcheck.sh
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 40
+          --health-start-period 30s
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Image de test (PHP 8.3 + oci8 + dépendances de dev)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: test
+          load: true
+          tags: netops-test:ci
+          cache-from: type=gha,scope=netops-test
+          cache-to: type=gha,scope=netops-test,mode=max
+      - name: Extensions PHP de l'image
+        run: docker run --rm --entrypoint php netops-test:ci -m
+      - name: Migrations Oracle + schema:validate + PHPUnit
+        # netops-run-tests (docker/php/run-tests.sh) : vide le schéma, applique les migrations,
+        # vérifie le schéma obtenu contre le mapping, puis lance toute la suite PHPUnit.
+        run: >-
+          docker run --rm --network host
+          -e APP_ENV=test
+          -e "DATABASE_URL=oci8://netops_test:ci_only_test@127.0.0.1:1521?servicename=XEPDB1&charset=AL32UTF8"
+          netops-test:ci
+
+  soap:
+    name: SOAP (ext-soap, WSDL, client d'exemple)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: "sqlite:///%kernel.project_dir%/var/ci_soap.db"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+          tools: composer:v2
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/composer/files
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+      - run: composer install --prefer-dist --no-progress
+      - name: ext-soap chargée
+        run: php -m | grep -qx soap
+      - name: Tests SOAP (groupe soap)
+        env:
+          APP_ENV: test
+        run: vendor/bin/phpunit --group soap
+      - name: Client SOAP d'exemple contre un serveur réel
+        env:
+          APP_ENV: dev
+          DATABASE_URL: "sqlite:///%kernel.project_dir%/var/ci_soap_demo.db"
+        run: |
+          php bin/console doctrine:schema:create --no-interaction
+          php bin/console doctrine:fixtures:load --no-interaction
+          # variables_order=EGPCS : le serveur intégré transmet alors l'environnement ($_ENV) à Symfony Runtime.
+          php -d variables_order=EGPCS -S 127.0.0.1:8000 -t public e2e/router.php > /tmp/php-server.log 2>&1 &
+          for _ in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8000/api/v1/health && break; sleep 1; done
+          curl -sf -o /tmp/incidents.wsdl 'http://127.0.0.1:8000/soap/incidents?wsdl'
+          php -r 'exit(false === simplexml_load_file("/tmp/incidents.wsdl") ? 1 : 0);'
+          php bin/soap-client-demo.php 'http://127.0.0.1:8000/soap/incidents?wsdl' nop_demo_cle_factice_pour_tests_locaux_0001
+      - name: Journal du serveur en cas d'échec
+        if: failure()
+        run: cat /tmp/php-server.log || true
+
+  docker:
+    name: Docker (build, compose up, test de fumée)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      # Valeurs factices : pile éphémère de la CI.
+      NETOPS_ORACLE_SYS_PASSWORD: ci_only_oracle
+      NETOPS_ORACLE_PASSWORD: ci_only_app
+      NETOPS_ORACLE_TEST_PASSWORD: ci_only_test
+      NETOPS_APP_SECRET: ci_only_app_secret
+      NETOPS_HTTP_PORT: "8088"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Image app (php-fpm, prod)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: prod
+          load: true
+          tags: netops-app:local
+          cache-from: type=gha,scope=netops-prod
+          cache-to: type=gha,scope=netops-prod,mode=max
+      - name: Image nginx
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: nginx
+          load: true
+          tags: netops-nginx:local
+          cache-from: type=gha,scope=netops-prod
+      - name: Extensions PHP de l'image prod
+        run: docker run --rm --entrypoint php netops-app:local -m
+      - name: compose up (Oracle + php-fpm + nginx, migrations au démarrage)
+        run: docker compose up -d --no-build --wait --wait-timeout 900
+      - name: Test de fumée
+        run: |
+          base="http://127.0.0.1:${NETOPS_HTTP_PORT}"
+          expect() {
+            code=$(curl -s -o /tmp/body -w '%{http_code}' "$2")
+            echo "$2 -> HTTP ${code} (attendu $1)"
+            [ "${code}" = "$1" ] || { head -c 2000 /tmp/body; exit 1; }
+          }
+          expect 200 "${base}/connexion"
+          grep -q '_csrf_token' /tmp/body
+          expect 200 "${base}/api/v1/health"
+          grep -q '"database":"ok"' /tmp/body
+          expect 200 "${base}/soap/incidents?wsdl"
+          grep -q 'definitions' /tmp/body
+          expect 401 "${base}/api/v1/incidents"
+      - name: Journaux en cas d'échec
+        if: failure()
+        run: docker compose logs --no-color --tail 300
+      - name: compose down
+        if: always()
+        run: docker compose down -v
+
+  security:
+    name: Sécurité (gitleaks sur tout l'historique)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        run: >-
+          docker run --rm --user "$(id -u):$(id -g)" -v "${PWD}:/repo"
+          ghcr.io/gitleaks/gitleaks:v8.30.1
+          git --redact --verbose --exit-code 1 /repo
