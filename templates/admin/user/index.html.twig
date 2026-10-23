@@ -1,0 +1,38 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Utilisateurs{% endblock %}
+
+{% block body %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="page-title mb-0">Utilisateurs</h1>
+    <a class="btn btn-primary" href="{{ path('app_admin_user_new') }}">Nouvel utilisateur</a>
+</div>
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <caption class="visually-hidden">Comptes utilisateurs</caption>
+            <thead class="table-light"><tr><th scope="col">Nom</th><th scope="col">E-mail</th><th scope="col">Rôle</th><th scope="col">État</th><th scope="col">Créé le</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+            <tbody>
+                {% for user in users %}
+                    <tr>
+                        <td class="fw-semibold">{{ user.fullName }}</td>
+                        <td>{{ user.email }}</td>
+                        <td><span class="badge text-bg-light border">{{ user.role.label }}</span></td>
+                        <td>{% if user.active %}<span class="badge text-bg-success">Actif</span>{% else %}<span class="badge text-bg-secondary">Désactivé</span>{% endif %}</td>
+                        <td class="small">{{ user.createdAt|date('d/m/Y') }}</td>
+                        <td class="text-end text-nowrap">
+                            <a class="btn btn-sm btn-outline-primary" href="{{ path('app_admin_user_edit', {id: user.id}) }}">Modifier</a>
+                            {% if user != app.user %}
+                                <form method="post" action="{{ path('app_admin_user_toggle', {id: user.id}) }}" class="d-inline" data-confirm="{{ user.active ? 'Désactiver' : 'Réactiver' }} le compte {{ user.email }} ?">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('toggle-user-' ~ user.id) }}">
+                                    <button class="btn btn-sm {{ user.active ? 'btn-outline-danger' : 'btn-outline-success' }}">{{ user.active ? 'Désactiver' : 'Activer' }}</button>
+                                </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

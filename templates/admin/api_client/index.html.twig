@@ -1,0 +1,40 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Clés d’API{% endblock %}
+
+{% block body %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="page-title mb-0">Clés d’API partenaires</h1>
+    <a class="btn btn-primary" href="{{ path('app_admin_api_client_new') }}">Nouvelle clé</a>
+</div>
+<p class="text-body-secondary small">Les clés sont stockées sous forme d’empreinte SHA-256 : seule leur partie initiale est affichée. Une clé perdue se révoque et se recrée.</p>
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <caption class="visually-hidden">Clés d’API</caption>
+            <thead class="table-light"><tr><th scope="col">Partenaire</th><th scope="col">Clé</th><th scope="col">Créée le</th><th scope="col">Dernière utilisation</th><th scope="col">État</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+            <tbody>
+                {% for client in clients %}
+                    <tr>
+                        <td class="fw-semibold">{{ client.name }}</td>
+                        <td><code>{{ client.keyPrefix }}…</code></td>
+                        <td class="small">{{ client.createdAt|date('d/m/Y H:i') }}</td>
+                        <td class="small">{{ client.lastUsedAt ? client.lastUsedAt|date('d/m/Y H:i') : 'jamais' }}</td>
+                        <td>{% if client.active %}<span class="badge text-bg-success">Active</span>{% else %}<span class="badge text-bg-secondary">Révoquée{{ client.revokedAt ? ' le ' ~ client.revokedAt|date('d/m/Y') }}</span>{% endif %}</td>
+                        <td class="text-end">
+                            {% if client.active %}
+                                <form method="post" action="{{ path('app_admin_api_client_revoke', {id: client.id}) }}" data-confirm="Révoquer la clé de {{ client.name }} ? Les appels de ce partenaire seront refusés.">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('revoke-api-client-' ~ client.id) }}">
+                                    <button class="btn btn-sm btn-outline-danger">Révoquer</button>
+                                </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="6" class="text-center text-body-secondary py-4">Aucune clé.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Clé créée{% endblock %}
+
+{% block body %}
+<h1 class="page-title">Clé d’API créée pour « {{ client.name }} »</h1>
+<div class="alert alert-warning" role="alert">
+    <strong>Copiez cette clé maintenant :</strong> elle ne sera plus jamais affichée (seule son empreinte est enregistrée).
+</div>
+<div class="card shadow-sm mb-3"><div class="card-body">
+    <label for="api-key" class="form-label">Clé d’API</label>
+    <input id="api-key" class="form-control api-key" value="{{ key }}" readonly onfocus="this.select()" data-testid="api-key">
+    <p class="small text-body-secondary mt-2 mb-0">À transmettre dans l’en-tête HTTP <code>X-API-Key</code> (REST et SOAP) ou l’en-tête SOAP <code>&lt;ApiKey&gt;</code>.</p>
+</div></div>
+<a class="btn btn-primary" href="{{ path('app_admin_api_client_index') }}">Retour aux clés</a>
+{% endblock %}

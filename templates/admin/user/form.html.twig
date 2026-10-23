@@ -1,0 +1,26 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ user ? 'Modifier ' ~ user.email : 'Nouvel utilisateur' }}{% endblock %}
+
+{% block body %}
+<nav aria-label="Fil d’Ariane"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="{{ path('app_admin_user_index') }}">Utilisateurs</a></li><li class="breadcrumb-item active" aria-current="page">{{ user ? user.email : 'Nouveau' }}</li></ol></nav>
+<h1 class="page-title">{{ user ? 'Modifier ' ~ user.fullName : 'Nouvel utilisateur' }}</h1>
+<div class="card shadow-sm"><div class="card-body">
+    {{ form_start(form, {attr: {novalidate: 'novalidate'}}) }}
+        <div class="row">
+            <div class="col-md-6">{{ form_row(form.firstName) }}</div>
+            <div class="col-md-6">{{ form_row(form.lastName) }}</div>
+            <div class="col-md-6">{{ form_row(form.email) }}</div>
+            <div class="col-md-6">{{ form_row(form.role) }}</div>
+        </div>
+        {{ form_row(form.active) }}
+        <div class="row">
+            <div class="col-md-6">{{ form_row(form.plainPassword.first) }}</div>
+            <div class="col-md-6">{{ form_row(form.plainPassword.second) }}</div>
+        </div>
+        {{ form_errors(form.plainPassword) }}
+        <button class="btn btn-primary">Enregistrer</button>
+        <a href="{{ path('app_admin_user_index') }}" class="btn btn-outline-secondary">Annuler</a>
+    {{ form_end(form) }}
+</div></div>
+{% endblock %}

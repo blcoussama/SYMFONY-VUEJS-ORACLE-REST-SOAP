@@ -1,0 +1,15 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Nouvelle clé d’API{% endblock %}
+
+{% block body %}
+<nav aria-label="Fil d’Ariane"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="{{ path('app_admin_api_client_index') }}">Clés d’API</a></li><li class="breadcrumb-item active" aria-current="page">Nouvelle</li></ol></nav>
+<h1 class="page-title">Nouvelle clé d’API</h1>
+<div class="card shadow-sm"><div class="card-body">
+    {{ form_start(form, {attr: {novalidate: 'novalidate'}}) }}
+        {{ form_row(form.name) }}
+        <button class="btn btn-primary">Générer la clé</button>
+        <a href="{{ path('app_admin_api_client_index') }}" class="btn btn-outline-secondary">Annuler</a>
+    {{ form_end(form) }}
+</div></div>
+{% endblock %}

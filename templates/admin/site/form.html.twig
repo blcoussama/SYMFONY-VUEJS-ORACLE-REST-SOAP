@@ -1,0 +1,22 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ site ? 'Modifier ' ~ site.code : 'Nouveau site' }}{% endblock %}
+
+{% block body %}
+<nav aria-label="Fil d’Ariane"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="{{ path('app_admin_site_index') }}">Sites</a></li><li class="breadcrumb-item active" aria-current="page">{{ site ? site.code : 'Nouveau' }}</li></ol></nav>
+<h1 class="page-title">{{ site ? 'Modifier le site ' ~ site.code : 'Nouveau site' }}</h1>
+<div class="card shadow-sm"><div class="card-body">
+    {{ form_start(form, {attr: {novalidate: 'novalidate'}}) }}
+        <div class="row">
+            <div class="col-md-4">{{ form_row(form.code) }}</div>
+            <div class="col-md-8">{{ form_row(form.name) }}</div>
+            <div class="col-md-4">{{ form_row(form.city) }}</div>
+            <div class="col-md-4">{{ form_row(form.region) }}</div>
+            <div class="col-md-4">{{ form_row(form.type) }}</div>
+        </div>
+        {{ form_row(form.active) }}
+        <button class="btn btn-primary">Enregistrer</button>
+        <a href="{{ path('app_admin_site_index') }}" class="btn btn-outline-secondary">Annuler</a>
+    {{ form_end(form) }}
+</div></div>
+{% endblock %}

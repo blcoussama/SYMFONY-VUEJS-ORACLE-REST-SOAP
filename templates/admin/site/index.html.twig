@@ -1,0 +1,37 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Sites{% endblock %}
+
+{% block body %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="page-title mb-0">Sites du réseau</h1>
+    <a class="btn btn-primary" href="{{ path('app_admin_site_new') }}">Nouveau site</a>
+</div>
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <caption class="visually-hidden">Sites du réseau</caption>
+            <thead class="table-light"><tr><th scope="col">Code</th><th scope="col">Nom</th><th scope="col">Ville</th><th scope="col">Région</th><th scope="col">Type</th><th scope="col">État</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+            <tbody>
+                {% for site in sites %}
+                    <tr>
+                        <td class="fw-semibold text-nowrap">{{ site.code }}</td>
+                        <td>{{ site.name }}</td>
+                        <td>{{ site.city }}</td>
+                        <td class="small">{{ site.region }}</td>
+                        <td class="small">{{ site.type.label }}</td>
+                        <td>{% if site.active %}<span class="badge text-bg-success">Actif</span>{% else %}<span class="badge text-bg-secondary">Inactif</span>{% endif %}</td>
+                        <td class="text-end text-nowrap">
+                            <a class="btn btn-sm btn-outline-primary" href="{{ path('app_admin_site_edit', {id: site.id}) }}">Modifier</a>
+                            <form method="post" action="{{ path('app_admin_site_delete', {id: site.id}) }}" class="d-inline" data-confirm="Supprimer le site {{ site.code }} ? (il sera désactivé s’il porte des incidents)">
+                                <input type="hidden" name="_token" value="{{ csrf_token('delete-site-' ~ site.id) }}">
+                                <button class="btn btn-sm btn-outline-danger">Supprimer</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
