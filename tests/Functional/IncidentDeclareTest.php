@@ -10,9 +10,11 @@ use App\Repository\IncidentRepository;
 use App\Tests\Support\WebTestHelpers;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\Clock\Test\ClockSensitiveTrait;
 
 final class IncidentDeclareTest extends WebTestCase
 {
+    use ClockSensitiveTrait;
     use WebTestHelpers;
 
     private KernelBrowser $client;
@@ -45,6 +47,8 @@ final class IncidentDeclareTest extends WebTestCase
 
     public function testValidDeclarationCreatesTheIncident(): void
     {
+        // Horloge figée : sinon le badge passe à « 7 h 59 min » si une minute s'écoule entre la création et l'affichage.
+        self::mockTime();
         $crawler = $this->client->request('GET', '/incidents/declarer');
         $this->client->submit($crawler->selectButton('Déclarer')->form([
             'incident[title]' => 'Perte de synchronisation radio',
