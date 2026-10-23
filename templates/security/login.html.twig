@@ -1,0 +1,41 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Connexion{% endblock %}
+{% block main_class %}container py-5{% endblock %}
+
+{% block body %}
+<div class="card login-card mx-auto shadow-sm">
+    <div class="card-body p-4">
+        <h1 class="h3 mb-1 text-center">Net<span class="text-success">Ops</span></h1>
+        <p class="text-center text-body-secondary mb-4">Incidents et interventions réseau</p>
+
+        {% if error %}
+            <div class="alert alert-danger" role="alert">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
+        {% endif %}
+
+        <form method="post" action="{{ path('app_login') }}" novalidate>
+            <div class="mb-3">
+                <label for="email" class="form-label">Adresse e-mail</label>
+                <input type="email" value="{{ last_username }}" name="email" id="email" class="form-control" autocomplete="username" required autofocus>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Mot de passe</label>
+                <input type="password" name="password" id="password" class="form-control" autocomplete="current-password" required>
+            </div>
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+            <button class="btn btn-primary w-100" type="submit">Se connecter</button>
+        </form>
+
+        <details class="mt-4 small text-body-secondary">
+            <summary>Comptes de démonstration (fictifs)</summary>
+            <p class="mt-2 mb-1">Mot de passe commun factice : <code>Demo1234!</code></p>
+            <ul class="mb-0">
+                <li><code>superviseur@netops.example</code> — superviseur</li>
+                <li><code>technicien1@netops.example</code> — technicien</li>
+                <li><code>agent1@netops.example</code> — agent NOC</li>
+                <li><code>admin@netops.example</code> — administrateur</li>
+            </ul>
+        </details>
+    </div>
+</div>
+{% endblock %}
