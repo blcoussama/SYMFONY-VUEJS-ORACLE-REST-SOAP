@@ -1,0 +1,3 @@
+{% macro status(status) %}<span class="badge {{ status.badgeClass }}">{{ status.label }}</span>{% endmacro %}
+{% macro priority(priority) %}<span class="badge prio-badge-{{ priority.value }}" title="{{ priority.label }}">{{ priority.value }}</span>{% endmacro %}
+{% macro sla(incident) %}{% set a = sla(incident) %}<span class="badge {{ a.state.badgeClass }}" title="Échéance SLA : {{ a.dueAt|date('d/m/Y H:i') }}">{{ a.label }}</span>{% endmacro %}

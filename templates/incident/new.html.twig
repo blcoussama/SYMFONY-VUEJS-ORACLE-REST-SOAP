@@ -1,0 +1,33 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Déclarer un incident{% endblock %}
+
+{% block importmap %}{{ importmap(['app', 'incident-form']) }}{% endblock %}
+
+{% block body %}
+<nav aria-label="Fil d’Ariane"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="{{ path('app_incident_index') }}">Incidents</a></li><li class="breadcrumb-item active" aria-current="page">Déclarer</li></ol></nav>
+<h1 class="page-title">Déclarer un incident</h1>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        {{ form_start(form, {attr: {novalidate: 'novalidate'}}) }}
+            {{ form_errors(form) }}
+            {{ form_row(form.title) }}
+            <div class="row">
+                <div class="col-md-5">{{ form_row(form.region, {attr: form.region.vars.attr|merge({'data-sites-url': path('app_ajax_sites')})}) }}</div>
+                <div class="col-md-7">{{ form_row(form.site) }}</div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">{{ form_row(form.category) }}</div>
+                <div class="col-md-6">{{ form_row(form.priority) }}</div>
+            </div>
+            {{ form_row(form.description) }}
+            <p class="small text-body-secondary">Délais SLA : {% for p, h in sla_hours() %}{{ p }} = {{ h }} h{{ not loop.last ? ' · ' }}{% endfor %}.</p>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-success">Déclarer</button>
+                <a href="{{ path('app_incident_index') }}" class="btn btn-outline-secondary">Annuler</a>
+            </div>
+        {{ form_end(form) }}
+    </div>
+</div>
+{% endblock %}

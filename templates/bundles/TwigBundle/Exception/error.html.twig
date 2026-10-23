@@ -1,0 +1,12 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Erreur {{ status_code }}{% endblock %}
+
+{% block body %}
+<div class="text-center py-5">
+    <p class="display-4 fw-bold text-body-secondary mb-2">{{ status_code }}</p>
+    <h1 class="h3">{% block error_title %}Une erreur est survenue{% endblock %}</h1>
+    <p class="text-body-secondary">{% block error_text %}L’opération n’a pas pu aboutir. Réessayez plus tard ; si le problème persiste, contactez l’administrateur.{% endblock %}</p>
+    <a class="btn btn-primary" href="{{ path('app_home') }}">Retour à l’accueil</a>
+</div>
+{% endblock %}

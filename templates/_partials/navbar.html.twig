@@ -1,0 +1,36 @@
+{% set route = app.request.attributes.get('_route') %}
+<nav class="navbar navbar-expand-lg navbar-dark navbar-netops" aria-label="Navigation principale">
+    <div class="container-xl">
+        <a class="navbar-brand" href="{{ path('app_home') }}">Net<span>Ops</span></a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav-main" aria-controls="nav-main" aria-expanded="false" aria-label="Afficher le menu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="nav-main">
+            <ul class="navbar-nav me-auto">
+                {% if is_granted('ROLE_SUPERVISEUR') %}
+                    <li class="nav-item"><a class="nav-link{{ route == 'app_dashboard' ? ' active' }}"{% if route == 'app_dashboard' %} aria-current="page"{% endif %} href="{{ path('app_dashboard') }}">Tableau de bord</a></li>
+                {% endif %}
+                <li class="nav-item"><a class="nav-link{{ route starts with 'app_incident' and route != 'app_incident_new' ? ' active' }}" href="{{ path('app_incident_index') }}">Incidents</a></li>
+                <li class="nav-item"><a class="nav-link{{ route == 'app_kanban' ? ' active' }}" href="{{ path('app_kanban') }}">Kanban</a></li>
+                {% if is_granted('ROLE_TECHNICIEN') %}
+                    <li class="nav-item"><a class="nav-link{{ route == 'app_intervention_mine' ? ' active' }}" href="{{ path('app_intervention_mine') }}">Mes interventions</a></li>
+                {% endif %}
+                {% if is_granted('ROLE_ADMIN') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle{{ route starts with 'app_admin' ? ' active' }}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Administration</a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ path('app_admin_site_index') }}">Sites</a></li>
+                            <li><a class="dropdown-item" href="{{ path('app_admin_user_index') }}">Utilisateurs</a></li>
+                            <li><a class="dropdown-item" href="{{ path('app_admin_api_client_index') }}">Clés d’API</a></li>
+                        </ul>
+                    </li>
+                {% endif %}
+            </ul>
+            <a class="btn btn-sm btn-success me-lg-3 my-2 my-lg-0" href="{{ path('app_incident_new') }}">Déclarer un incident</a>
+            <div class="d-flex align-items-center gap-2 text-white small">
+                <span>{{ app.user.fullName }} <span class="badge text-bg-light">{{ app.user.role.label }}</span></span>
+                <a class="btn btn-sm btn-outline-light" href="{{ logout_path() }}">Déconnexion</a>
+            </div>
+        </div>
+    </div>
+</nav>

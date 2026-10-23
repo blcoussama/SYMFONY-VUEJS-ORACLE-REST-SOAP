@@ -1,0 +1,84 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Incidents{% endblock %}
+
+{% block importmap %}{{ importmap(['app', 'incident-list']) }}{% endblock %}
+
+{% block body %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="page-title mb-0">Incidents</h1>
+    <a class="btn btn-success" href="{{ path('app_incident_new') }}">Déclarer un incident</a>
+</div>
+
+<form id="incident-filters" class="card card-body shadow-sm mb-3" method="get" action="{{ path('app_incident_index') }}" role="search" aria-label="Filtrer les incidents">
+    <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-4 col-xl-3">
+            <label for="filter-q" class="form-label small mb-1">Recherche</label>
+            <input type="search" id="filter-q" name="q" value="{{ filter.query }}" class="form-control form-control-sm" placeholder="Référence, titre, site…">
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <label for="filter-status" class="form-label small mb-1">Statut</label>
+            <select id="filter-status" name="status" class="form-select form-select-sm">
+                <option value="">Tous</option>
+                <option value="{{ open_value }}"{{ query.status|default('') == open_value ? ' selected' }}>Ouverts (tous)</option>
+                {% for s in statuses %}
+                    <option value="{{ s.value }}"{{ query.status|default('') == s.value ? ' selected' }}>{{ s.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-4 col-xl-1">
+            <label for="filter-priority" class="form-label small mb-1">Priorité</label>
+            <select id="filter-priority" name="priority" class="form-select form-select-sm">
+                <option value="">Toutes</option>
+                {% for p in priorities %}
+                    <option value="{{ p.value }}"{{ filter.priority == p ? ' selected' }}>{{ p.value }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <label for="filter-region" class="form-label small mb-1">Région</label>
+            <select id="filter-region" name="region" class="form-select form-select-sm" data-sites-url="{{ path('app_ajax_sites') }}">
+                <option value="">Toutes</option>
+                {% for r in regions %}
+                    <option value="{{ r }}"{{ filter.region == r ? ' selected' }}>{{ r }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <label for="filter-site" class="form-label small mb-1">Site</label>
+            <select id="filter-site" name="site" class="form-select form-select-sm">
+                <option value="">Tous</option>
+                {% for s in sites %}
+                    <option value="{{ s.id }}"{{ filter.site and filter.site.id == s.id ? ' selected' }}>{{ s.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <label for="filter-assignee" class="form-label small mb-1">Technicien</label>
+            <select id="filter-assignee" name="assignee" class="form-select form-select-sm">
+                <option value="">Tous</option>
+                {% for t in technicians %}
+                    <option value="{{ t.id }}"{{ filter.assignee and filter.assignee.id == t.id ? ' selected' }}>{{ t.fullName }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-4 col-xl-auto">
+            <div class="form-check mb-1">
+                <input class="form-check-input" type="checkbox" id="filter-breached" name="breached" value="1"{{ filter.breachedOnly ? ' checked' }}>
+                <label class="form-check-label small" for="filter-breached">En dépassement SLA</label>
+            </div>
+        </div>
+        <div class="col-12 col-xl-auto d-flex gap-2">
+            <input type="hidden" name="sort" value="{{ filter.sort }}">
+            <input type="hidden" name="dir" value="{{ filter.direction }}">
+            <button type="submit" class="btn btn-sm btn-primary">Filtrer</button>
+            <a href="{{ path('app_incident_index') }}" class="btn btn-sm btn-outline-secondary" data-reset>Réinitialiser</a>
+        </div>
+    </div>
+</form>
+
+<p id="incident-results-status" class="visually-hidden" aria-live="polite"></p>
+<div id="incident-results" aria-busy="false">
+    {{ include('incident/_results.html.twig') }}
+</div>
+{% endblock %}

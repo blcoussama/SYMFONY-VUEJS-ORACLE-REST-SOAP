@@ -1,0 +1,14 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Kanban{% endblock %}
+{% block main_class %}container-fluid py-4 px-3 px-lg-4{% endblock %}
+
+{% block importmap %}{{ importmap(['app', 'kanban']) }}{% endblock %}
+
+{% block body %}
+<h1 class="page-title">Tableau Kanban</h1>
+<div id="kanban-app" data-config="{{ config|json_encode }}" data-csrf-token="{{ csrf_token(csrf_token_id) }}">
+    <noscript><div class="alert alert-warning">Le tableau Kanban nécessite JavaScript. Utilisez la <a href="{{ path('app_incident_index') }}">liste des incidents</a>.</div></noscript>
+    <div class="text-center py-5" role="status"><div class="spinner-border text-primary" aria-hidden="true"></div><p class="mt-2">Chargement du tableau…</p></div>
+</div>
+{% endblock %}

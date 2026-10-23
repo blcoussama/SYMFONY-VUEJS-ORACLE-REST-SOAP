@@ -1,0 +1,68 @@
+{% import '_partials/badges.html.twig' as badges %}
+{% macro sort_link(label, field, filter, query) %}
+    {% set active = filter.sort == field %}
+    {% set dir = active and filter.direction == 'asc' ? 'desc' : 'asc' %}
+    <a href="{{ path('app_incident_index', query|merge({sort: field, dir: dir, page: 1})) }}" data-ajax-link class="link-dark text-decoration-none"
+       {% if active %}aria-sort="{{ filter.direction == 'asc' ? 'ascending' : 'descending' }}"{% endif %}>
+        {{ label }}{% if active %} <span aria-hidden="true">{{ filter.direction == 'asc' ? '▲' : '▼' }}</span>{% endif %}
+    </a>
+{% endmacro %}
+{% set q = query|filter((v, k) => k != 'page') %}
+<div class="card shadow-sm" data-total="{{ page.total }}" data-total-label="{{ page.total }} incident(s) trouvé(s).">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span><strong>{{ page.total }}</strong> incident{{ page.total > 1 ? 's' }}</span>
+        <span class="small text-body-secondary">Page {{ page.page }} / {{ page.pageCount }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover table-incidents mb-0">
+            <caption class="visually-hidden">Liste des incidents</caption>
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">{{ _self.sort_link('Référence', 'reference', filter, q) }}</th>
+                    <th scope="col">Titre</th>
+                    <th scope="col">Site</th>
+                    <th scope="col">{{ _self.sort_link('Priorité', 'priority', filter, q) }}</th>
+                    <th scope="col">{{ _self.sort_link('Statut', 'status', filter, q) }}</th>
+                    <th scope="col">Technicien</th>
+                    <th scope="col">{{ _self.sort_link('SLA', 'slaDueAt', filter, q) }}</th>
+                    <th scope="col">{{ _self.sort_link('Créé le', 'createdAt', filter, q) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for incident in page.items %}
+                    <tr>
+                        <td class="text-nowrap"><a href="{{ path('app_incident_show', {reference: incident.reference}) }}" class="fw-semibold">{{ incident.reference }}</a></td>
+                        <td class="title-cell text-truncate" title="{{ incident.title }}">{{ incident.title }}</td>
+                        <td class="text-nowrap"><span title="{{ incident.site.name }}">{{ incident.site.code }}</span></td>
+                        <td>{{ badges.priority(incident.priority) }}</td>
+                        <td class="text-nowrap">{{ badges.status(incident.status) }}</td>
+                        <td class="text-nowrap">{{ incident.assignee ? incident.assignee.fullName : '—' }}</td>
+                        <td class="text-nowrap">{{ badges.sla(incident) }}</td>
+                        <td class="text-nowrap small">{{ incident.createdAt|date('d/m/Y H:i') }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="8" class="text-center text-body-secondary py-4">Aucun incident ne correspond à ces critères.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page.pageCount > 1 %}
+        <div class="card-footer bg-white">
+            <nav aria-label="Pagination des incidents">
+                <ul class="pagination pagination-sm mb-0 flex-wrap">
+                    <li class="page-item{{ not page.hasPrevious ? ' disabled' }}">
+                        <a class="page-link" data-ajax-link href="{{ path('app_incident_index', q|merge({page: page.page - 1})) }}">Précédente</a>
+                    </li>
+                    {% for p in 1..page.pageCount %}
+                        <li class="page-item{{ p == page.page ? ' active' }}"{% if p == page.page %} aria-current="page"{% endif %}>
+                            <a class="page-link" data-ajax-link href="{{ path('app_incident_index', q|merge({page: p})) }}">{{ p }}</a>
+                        </li>
+                    {% endfor %}
+                    <li class="page-item{{ not page.hasNext ? ' disabled' }}">
+                        <a class="page-link" data-ajax-link href="{{ path('app_incident_index', q|merge({page: page.page + 1})) }}">Suivante</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    {% endif %}
+</div>

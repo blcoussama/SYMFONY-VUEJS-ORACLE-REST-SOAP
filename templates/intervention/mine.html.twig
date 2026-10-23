@@ -1,0 +1,84 @@
+{% extends 'base.html.twig' %}
+{% import '_partials/badges.html.twig' as badges %}
+
+{% block title %}Mes interventions{% endblock %}
+
+{% block body %}
+<h1 class="page-title">Mes interventions</h1>
+
+<section class="mb-4" aria-labelledby="assigned-title">
+    <h2 id="assigned-title" class="h5">Incidents qui me sont assignés <span class="badge text-bg-secondary rounded-pill">{{ assigned|length }}</span></h2>
+    {% if assigned is empty %}
+        <p class="text-body-secondary">Aucun incident ouvert ne vous est assigné.</p>
+    {% else %}
+        <div class="row g-3">
+            {% for incident in assigned %}
+                <div class="col-md-6 col-xl-4">
+                    <article class="card h-100 shadow-sm kanban-card prio-{{ incident.priority.value }}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between gap-2">
+                                <a href="{{ path('app_incident_show', {reference: incident.reference}) }}" class="fw-semibold">{{ incident.reference }}</a>
+                                {{ badges.status(incident.status) }}
+                            </div>
+                            <p class="mb-1 mt-1">{{ incident.title }}</p>
+                            <p class="small text-body-secondary mb-2">{{ incident.site.label }} · {{ badges.priority(incident.priority) }} {{ badges.sla(incident) }}</p>
+                            {{ form_start(plan_forms[incident.reference], {attr: {class: 'row g-2 align-items-end'}}) }}
+                                <div class="col-8">{{ form_row(plan_forms[incident.reference].plannedAt, {row_attr: {class: 'mb-0'}, label_attr: {class: 'small'}}) }}</div>
+                                <div class="col-4"><button class="btn btn-sm btn-outline-primary w-100">Planifier</button></div>
+                            {{ form_end(plan_forms[incident.reference]) }}
+                        </div>
+                    </article>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</section>
+
+<section aria-labelledby="interventions-title">
+    <h2 id="interventions-title" class="h5">Interventions</h2>
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <caption class="visually-hidden">Mes interventions planifiées, en cours et terminées</caption>
+                <thead class="table-light">
+                    <tr><th scope="col">Incident</th><th scope="col">Prévue le</th><th scope="col">État</th><th scope="col" class="w-50">Action</th></tr>
+                </thead>
+                <tbody>
+                    {% for intervention in interventions %}
+                        {% set incident = intervention.incident %}
+                        <tr>
+                            <td><a href="{{ path('app_incident_show', {reference: incident.reference}) }}">{{ incident.reference }}</a><br><span class="small text-body-secondary">{{ incident.site.code }} — {{ incident.title|u.truncate(50, '…') }}</span></td>
+                            <td class="text-nowrap small">{{ intervention.plannedAt|date('d/m/Y H:i') }}</td>
+                            <td class="text-nowrap">
+                                {% if intervention.finished %}<span class="badge text-bg-success">Terminée</span> <span class="small">{{ duration(intervention.durationMinutes) }}</span>
+                                {% elseif intervention.inProgress %}<span class="badge text-bg-warning">En cours</span>
+                                {% else %}<span class="badge text-bg-info">Planifiée</span>{% endif %}
+                            </td>
+                            <td>
+                                {% if intervention.finished %}
+                                    <span class="small">{{ intervention.report|u.truncate(90, '…') }}</span>
+                                {% elseif not is_granted('INTERVENTION_EDIT', intervention) %}
+                                    <span class="small text-body-secondary">Incident réassigné.</span>
+                                {% elseif intervention.inProgress %}
+                                    {% set f = finish_forms[intervention.id] %}
+                                    {{ form_start(f) }}
+                                        {{ form_row(f.report, {label_attr: {class: 'small'}}) }}
+                                        <button class="btn btn-sm btn-success">Terminer l’intervention</button>
+                                    {{ form_end(f) }}
+                                {% else %}
+                                    <form method="post" action="{{ path('app_intervention_start', {id: intervention.id}) }}">
+                                        <input type="hidden" name="_token" value="{{ csrf_token('intervention-' ~ intervention.id) }}">
+                                        <button class="btn btn-sm btn-primary">Démarrer</button>
+                                    </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="4" class="text-center text-body-secondary py-4">Aucune intervention.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}

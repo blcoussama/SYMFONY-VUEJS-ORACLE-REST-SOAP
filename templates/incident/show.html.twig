@@ -1,0 +1,173 @@
+{% extends 'base.html.twig' %}
+{% import '_partials/badges.html.twig' as badges %}
+
+{% block title %}{{ incident.reference }}{% endblock %}
+
+{% block body %}
+{% set assessment = sla(incident) %}
+{% set simple_actions = actions|filter(a => a not in ['qualifier', 'assigner', 'resoudre']) %}
+<nav aria-label="Fil d’Ariane"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="{{ path('app_incident_index') }}">Incidents</a></li><li class="breadcrumb-item active" aria-current="page">{{ incident.reference }}</li></ol></nav>
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+    <h1 class="page-title mb-0">{{ incident.reference }}</h1>
+    {{ badges.status(incident.status) }}
+    {{ badges.priority(incident.priority) }}
+    <span class="badge {{ assessment.state.badgeClass }}" data-testid="sla-badge">{{ assessment.label }}</span>
+</div>
+<p class="lead mb-4">{{ incident.title }}</p>
+
+<div class="row g-4">
+    <div class="col-lg-8 order-2 order-lg-1">
+        <section class="card shadow-sm mb-4" aria-labelledby="desc-title">
+            <div class="card-header bg-white"><h2 id="desc-title" class="h6 mb-0">Description</h2></div>
+            <div class="card-body"><p class="mb-0" style="white-space: pre-line">{{ incident.description }}</p></div>
+        </section>
+
+        <section class="card shadow-sm mb-4" aria-labelledby="interventions-title">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h2 id="interventions-title" class="h6 mb-0">Interventions</h2>
+                <span class="badge text-bg-secondary rounded-pill">{{ incident.interventions|length }}</span>
+            </div>
+            <div class="card-body">
+                {% for intervention in incident.interventions %}
+                    <div class="border rounded p-2 mb-2">
+                        <div class="d-flex flex-wrap justify-content-between gap-2">
+                            <strong>{{ intervention.technician.fullName }}</strong>
+                            <span class="small text-body-secondary">
+                                Prévue le {{ intervention.plannedAt|date('d/m/Y H:i') }}
+                                {% if intervention.startedAt %} · démarrée le {{ intervention.startedAt|date('d/m/Y H:i') }}{% endif %}
+                                {% if intervention.endedAt %} · terminée le {{ intervention.endedAt|date('d/m/Y H:i') }} ({{ duration(intervention.durationMinutes) }}){% endif %}
+                            </span>
+                        </div>
+                        {% if intervention.report %}<p class="mb-0 mt-1 small">{{ intervention.report }}</p>{% endif %}
+                        {% if is_granted('INTERVENTION_EDIT', intervention) and intervention.planned %}
+                            <form method="post" action="{{ path('app_intervention_start', {id: intervention.id}) }}" class="mt-2">
+                                <input type="hidden" name="_token" value="{{ csrf_token('intervention-' ~ intervention.id) }}">
+                                <button class="btn btn-sm btn-primary">Démarrer l’intervention</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <p class="text-body-secondary mb-2">Aucune intervention.</p>
+                {% endfor %}
+
+                {% if is_granted('INCIDENT_WORK', incident) and incident.open and incident.status.value != 'NOUVEAU' and incident.status.value != 'QUALIFIE' %}
+                    {{ form_start(plan_form, {attr: {class: 'row g-2 align-items-end mt-2'}}) }}
+                        <div class="col-sm-8">{{ form_row(plan_form.plannedAt, {row_attr: {class: 'mb-0'}}) }}</div>
+                        <div class="col-sm-4"><button class="btn btn-outline-primary w-100">Planifier</button></div>
+                    {{ form_end(plan_form) }}
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="card shadow-sm" aria-labelledby="journal" id="journal-section">
+            <div class="card-header bg-white"><h2 id="journal" class="h6 mb-0">Journal</h2></div>
+            <div class="card-body">
+                <ol class="timeline">
+                    {% for event in incident.events %}
+                        <li class="timeline-item type-{{ event.type.value }}">
+                            <div class="small text-body-secondary">{{ event.createdAt|date('d/m/Y H:i') }} · {{ event.authorLabel }}</div>
+                            <div>
+                                <span class="fw-semibold">{{ event.type.label }}</span>
+                                {% if event.fromStatus or event.toStatus %}
+                                    : {% if event.fromStatus %}{{ event.fromStatus.label }} → {% endif %}{{ event.toStatus ? event.toStatus.label }}
+                                {% endif %}
+                            </div>
+                            {% if event.comment %}<div class="small">{{ event.comment }}</div>{% endif %}
+                        </li>
+                    {% endfor %}
+                </ol>
+                {% if is_granted('INCIDENT_COMMENT', incident) %}
+                    {{ form_start(comment_form) }}
+                        {{ form_row(comment_form.text) }}
+                        <button class="btn btn-sm btn-outline-primary">Commenter</button>
+                    {{ form_end(comment_form) }}
+                {% endif %}
+            </div>
+        </section>
+    </div>
+
+    <aside class="col-lg-4 order-1 order-lg-2">
+        <section class="card shadow-sm mb-4" aria-labelledby="actions-title">
+            <div class="card-header bg-white"><h2 id="actions-title" class="h6 mb-0">Actions</h2></div>
+            <div class="card-body">
+                {% if 'qualifier' in actions %}
+                    {{ form_start(priority_form) }}
+                        <p class="small text-body-secondary mb-2">Confirmez la priorité pour qualifier l’incident.</p>
+                        {{ form_row(priority_form.priority) }}
+                        {{ form_row(priority_form.comment) }}
+                        <button class="btn btn-primary btn-sm w-100" data-testid="action-qualifier">Qualifier</button>
+                    {{ form_end(priority_form) }}
+                    <hr>
+                {% endif %}
+
+                {% if is_granted('INCIDENT_ASSIGN', incident) %}
+                    {{ form_start(assign_form) }}
+                        {{ form_row(assign_form.technician) }}
+                        {{ form_row(assign_form.comment) }}
+                        <button class="btn btn-primary btn-sm w-100" data-testid="action-assigner">{{ incident.assignee ? 'Réassigner' : 'Assigner' }}</button>
+                    {{ form_end(assign_form) }}
+                    <hr>
+                {% endif %}
+
+                {% if 'resoudre' in actions %}
+                    <form method="post" action="{{ path('app_incident_transition', {reference: incident.reference, transition: 'resoudre'}) }}" class="mb-3">
+                        <input type="hidden" name="_token" value="{{ csrf_token('incident-' ~ incident.reference) }}">
+                        <input type="hidden" name="version" value="{{ incident.version }}">
+                        <label for="resolve-report" class="form-label">Compte rendu d’intervention{{ incident.hasCompletedInterventionReport ? ' (facultatif)' }}</label>
+                        <textarea id="resolve-report" name="report" class="form-control mb-2" rows="3" maxlength="2000"{{ not incident.hasCompletedInterventionReport ? ' required' }}></textarea>
+                        <button class="btn btn-success btn-sm w-100" data-testid="action-resoudre">Résoudre l’incident</button>
+                    </form>
+                {% endif %}
+
+                {% if simple_actions is not empty %}
+                    <form method="post" action="{{ path('app_incident_transition', {reference: incident.reference, transition: simple_actions|first}) }}">
+                        <input type="hidden" name="_token" value="{{ csrf_token('incident-' ~ incident.reference) }}">
+                        <input type="hidden" name="version" value="{{ incident.version }}">
+                        <label for="transition-comment" class="form-label small">Commentaire (facultatif)</label>
+                        <textarea id="transition-comment" name="comment" class="form-control form-control-sm mb-2" rows="2" maxlength="1000"></textarea>
+                        <div class="d-grid gap-2">
+                            {% for transition in simple_actions %}
+                                {% set style = workflow_metadata(incident, 'style', transition)|default('secondary') %}
+                                <button class="btn btn-{{ style }} btn-sm" data-testid="action-{{ transition }}"
+                                        formaction="{{ path('app_incident_transition', {reference: incident.reference, transition: transition}) }}">{{ transition_label(transition) }}</button>
+                            {% endfor %}
+                        </div>
+                    </form>
+                {% endif %}
+
+                {% if actions is empty and not is_granted('INCIDENT_ASSIGN', incident) %}
+                    <p class="text-body-secondary small mb-0">Aucune action disponible pour votre rôle dans ce statut.</p>
+                {% endif %}
+
+                {% if is_granted('INCIDENT_PRIORITIZE', incident) and incident.status.value != 'NOUVEAU' %}
+                    <details class="mt-3">
+                        <summary class="small">Changer la priorité</summary>
+                        {{ form_start(priority_form, {attr: {class: 'mt-2'}}) }}
+                            {{ form_row(priority_form.priority) }}
+                            {{ form_row(priority_form.comment) }}
+                            <button class="btn btn-outline-primary btn-sm w-100">Enregistrer la priorité</button>
+                        {{ form_end(priority_form) }}
+                    </details>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="card shadow-sm" aria-labelledby="info-title">
+            <div class="card-header bg-white"><h2 id="info-title" class="h6 mb-0">Informations</h2></div>
+            <dl class="card-body row small mb-0">
+                <dt class="col-5">Site</dt><dd class="col-7">{{ incident.site.label }}<br><span class="text-body-secondary">{{ incident.site.city }} · {{ incident.site.region }}</span></dd>
+                <dt class="col-5">Type de site</dt><dd class="col-7">{{ incident.site.type.label }}</dd>
+                <dt class="col-5">Catégorie</dt><dd class="col-7">{{ incident.category.label }}</dd>
+                <dt class="col-5">Déclaré par</dt><dd class="col-7">{{ incident.reporterLabel }} <span class="text-body-secondary">({{ incident.source.label }})</span></dd>
+                <dt class="col-5">Technicien</dt><dd class="col-7">{{ incident.assignee ? incident.assignee.fullName : '—' }}</dd>
+                <dt class="col-5">Créé le</dt><dd class="col-7">{{ incident.createdAt|date('d/m/Y H:i') }}</dd>
+                <dt class="col-5">Échéance SLA</dt><dd class="col-7">{{ incident.slaDueAt|date('d/m/Y H:i') }} <span class="text-body-secondary">({{ sla_hours()[incident.priority.value] }} h)</span></dd>
+                {% if incident.resolvedAt %}<dt class="col-5">Résolu le</dt><dd class="col-7">{{ incident.resolvedAt|date('d/m/Y H:i') }}</dd>{% endif %}
+                {% if incident.closedAt %}<dt class="col-5">Clos le</dt><dd class="col-7">{{ incident.closedAt|date('d/m/Y H:i') }}</dd>{% endif %}
+                <dt class="col-5">Version</dt><dd class="col-7 mb-0">{{ incident.version }}</dd>
+            </dl>
+        </section>
+    </aside>
+</div>
+{% endblock %}

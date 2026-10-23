@@ -1,0 +1,233 @@
+/* NetOps — compléments à Bootstrap 5 */
+:root {
+    --nop-navy: #0b2545;
+    --nop-accent: #13a89e;
+    --nop-p1: #dc3545;
+    --nop-p2: #fd7e14;
+    --nop-p3: #0d6efd;
+    --nop-p4: #6c757d;
+}
+
+body {
+    background-color: #f4f6f9;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1 0 auto;
+}
+
+.navbar-netops {
+    background-color: var(--nop-navy);
+}
+
+.navbar-netops .navbar-brand {
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+
+.navbar-netops .navbar-brand span {
+    color: var(--nop-accent);
+}
+
+.skip-link {
+    position: absolute;
+    left: -9999px;
+    z-index: 2000;
+}
+
+.skip-link:focus {
+    left: 1rem;
+    top: .5rem;
+}
+
+:focus-visible {
+    outline: 3px solid #ffbf47;
+    outline-offset: 2px;
+}
+
+.page-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.table-incidents td,
+.table-incidents th {
+    vertical-align: middle;
+}
+
+.table-incidents .title-cell {
+    max-width: 22rem;
+}
+
+.is-loading {
+    opacity: .5;
+    transition: opacity .15s ease-in-out;
+    pointer-events: none;
+}
+
+/* Badges de priorité */
+.prio-badge-P1 { background-color: var(--nop-p1); color: #fff; }
+.prio-badge-P2 { background-color: var(--nop-p2); color: #111; }
+.prio-badge-P3 { background-color: var(--nop-p3); color: #fff; }
+.prio-badge-P4 { background-color: var(--nop-p4); color: #fff; }
+
+/* Journal chronologique */
+.timeline {
+    list-style: none;
+    padding-left: 0;
+    border-left: 2px solid #dee2e6;
+    margin-left: .5rem;
+}
+
+.timeline-item {
+    position: relative;
+    padding: 0 0 1rem 1.25rem;
+}
+
+.timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -7px;
+    top: .35rem;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #adb5bd;
+}
+
+.timeline-item.type-TRANSITION::before { background: var(--bs-primary); }
+.timeline-item.type-CREATION::before { background: var(--nop-accent); }
+.timeline-item.type-ASSIGNATION::before { background: var(--bs-secondary); }
+.timeline-item.type-PRIORITE::before { background: var(--nop-p2); }
+.timeline-item.type-COMMENTAIRE::before { background: #fff; border: 2px solid #6c757d; }
+
+/* Kanban */
+.kanban-board {
+    display: flex;
+    gap: .75rem;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+    align-items: flex-start;
+}
+
+.kanban-column {
+    flex: 0 0 15.5rem;
+    width: 15.5rem;
+    min-width: 0;
+    background: #e9ecef;
+    border-radius: .5rem;
+    padding: .5rem;
+    min-height: 12rem;
+    transition: background-color .15s, outline-color .15s;
+    outline: 2px dashed transparent;
+}
+
+.kanban-column.drop-allowed {
+    background: #d1e7dd;
+    outline-color: var(--bs-success);
+}
+
+.kanban-column.drop-denied {
+    opacity: .55;
+}
+
+.kanban-column-header {
+    padding: .25rem .25rem .5rem;
+}
+
+.kanban-cards {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.kanban-card {
+    border-left: 5px solid var(--nop-p4);
+    cursor: grab;
+}
+
+.kanban-card:active {
+    cursor: grabbing;
+}
+
+.kanban-card.is-busy {
+    opacity: .6;
+}
+
+.kanban-card.prio-P1 { border-left-color: var(--nop-p1); }
+.kanban-card.prio-P2 { border-left-color: var(--nop-p2); }
+.kanban-card.prio-P3 { border-left-color: var(--nop-p3); }
+.kanban-card.prio-P4 { border-left-color: var(--nop-p4); }
+
+.kanban-title {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Tableau de bord : tendance 30 jours (barres CSS) */
+.trend-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 220px;
+    border-bottom: 1px solid #ced4da;
+}
+
+.trend-day {
+    flex: 1 1 0;
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 100%;
+}
+
+.trend-bar {
+    flex: 1 1 0;
+    border-radius: 2px 2px 0 0;
+    min-height: 1px;
+}
+
+.trend-bar.created { background: var(--nop-p3); }
+.trend-bar.resolved { background: var(--nop-accent); }
+
+.legend-swatch {
+    display: inline-block;
+    width: .8rem;
+    height: .8rem;
+    border-radius: 2px;
+    vertical-align: middle;
+}
+
+.kpi-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.sql-block {
+    font-size: .8rem;
+    white-space: pre;
+    overflow-x: auto;
+    background: #0b2545;
+    color: #e9ecef;
+    border-radius: .375rem;
+    padding: .75rem;
+}
+
+.api-key {
+    font-family: var(--bs-font-monospace);
+    word-break: break-all;
+}
+
+.login-card {
+    max-width: 26rem;
+}
+
+footer.site-footer {
+    font-size: .85rem;
+}
