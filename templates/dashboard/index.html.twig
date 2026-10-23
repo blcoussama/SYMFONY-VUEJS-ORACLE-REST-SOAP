@@ -1,0 +1,147 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Tableau de bord{% endblock %}
+
+{% block body %}
+{% set open_total = open_by_priority|reduce((carry, v) => carry + v, 0) %}
+<h1 class="page-title">Tableau de bord</h1>
+<p class="text-body-secondary">Indicateurs calculés en base (DQL et SQL natif) — période : 30 derniers jours.</p>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card shadow-sm h-100"><div class="card-body">
+            <div class="small text-body-secondary">Incidents ouverts</div>
+            <div class="kpi-value" data-testid="kpi-open">{{ open_total }}</div>
+            <a class="small" href="{{ path('app_incident_index', {status: 'OUVERTS'}) }}">Voir la liste</a>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card shadow-sm h-100"><div class="card-body">
+            <div class="small text-body-secondary">En dépassement SLA</div>
+            <div class="kpi-value text-danger" data-testid="kpi-breached">{{ breached }}</div>
+            <a class="small" href="{{ path('app_incident_index', {breached: 1}) }}">Voir la liste</a>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card shadow-sm h-100"><div class="card-body">
+            <div class="small text-body-secondary">Respect du SLA</div>
+            <div class="kpi-value" data-testid="kpi-sla">{{ compliance.rate is null ? '—' : compliance.rate|number_format(1, ',') ~ ' %' }}</div>
+            <div class="small text-body-secondary">{{ compliance.met }} / {{ compliance.resolved }} incidents résolus à temps</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card shadow-sm h-100"><div class="card-body">
+            <div class="small text-body-secondary">Temps moyen de résolution</div>
+            <div class="kpi-value" data-testid="kpi-mttr">{{ duration(resolution.overall) }}</div>
+            <div class="small text-body-secondary">sur {{ resolution.resolved }} incidents résolus</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-5">
+        <section class="card shadow-sm h-100" aria-labelledby="prio-title">
+            <div class="card-header bg-white"><h2 id="prio-title" class="h6 mb-0">Incidents ouverts par priorité</h2></div>
+            <div class="card-body">
+                {% for priority, count in open_by_priority %}
+                    {% set pct = open_total > 0 ? (100 * count / open_total)|round : 0 %}
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between small"><span><span class="badge prio-badge-{{ priority }}">{{ priority }}</span></span><span>{{ count }}</span></div>
+                        <div class="progress" role="progressbar" aria-label="{{ priority }} : {{ count }} incident(s)" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100" style="height: .6rem">
+                            <div class="progress-bar prio-badge-{{ priority }}" style="width: {{ pct }}%"></div>
+                        </div>
+                    </div>
+                {% endfor %}
+                <h3 class="h6 mt-4">Temps moyen de résolution par priorité</h3>
+                <table class="table table-sm small mb-0">
+                    <thead><tr><th scope="col">Priorité</th><th scope="col">Résolus</th><th scope="col">Moyenne</th><th scope="col">SLA</th></tr></thead>
+                    <tbody>
+                        {% for priority, hours in sla_hours() %}
+                            {% set row = resolution.byPriority[priority] ?? null %}
+                            <tr>
+                                <td><span class="badge prio-badge-{{ priority }}">{{ priority }}</span></td>
+                                <td>{{ row ? row.count : 0 }}</td>
+                                <td>{{ row ? duration(row.avgMinutes) : '—' }}</td>
+                                <td>{{ hours }} h</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+    <div class="col-lg-7">
+        <section class="card shadow-sm h-100" aria-labelledby="trend-title">
+            <div class="card-header bg-white d-flex flex-wrap justify-content-between gap-2">
+                <h2 id="trend-title" class="h6 mb-0">Tendance sur 30 jours</h2>
+                <span class="small"><span class="legend-swatch" style="background: var(--nop-p3)"></span> créés · <span class="legend-swatch" style="background: var(--nop-accent)"></span> résolus</span>
+            </div>
+            <div class="card-body">
+                {% set max = max(1, trend|map(d => max(d.created, d.resolved))|reduce((a, b) => max(a, b), 1)) %}
+                <div class="trend-chart" role="img" aria-label="Incidents créés et résolus par jour sur 30 jours">
+                    {% for day in trend %}
+                        <div class="trend-day" title="{{ day.label }} : {{ day.created }} créé(s), {{ day.resolved }} résolu(s)">
+                            <div class="trend-bar created" style="height: {{ (100 * day.created / max)|round }}%"></div>
+                            <div class="trend-bar resolved" style="height: {{ (100 * day.resolved / max)|round }}%"></div>
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="d-flex justify-content-between small text-body-secondary mt-1"><span>{{ trend|first.label }}</span><span>{{ trend|last.label }}</span></div>
+                <table class="visually-hidden">
+                    <caption>Tendance quotidienne</caption>
+                    <thead><tr><th scope="col">Jour</th><th scope="col">Créés</th><th scope="col">Résolus</th></tr></thead>
+                    <tbody>{% for day in trend %}<tr><td>{{ day.label }}</td><td>{{ day.created }}</td><td>{{ day.resolved }}</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <section class="card shadow-sm" aria-labelledby="top-title">
+            <div class="card-header bg-white"><h2 id="top-title" class="h6 mb-0">Top 5 des sites en incident (30 jours)</h2></div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0" data-testid="top-sites">
+                    <thead class="table-light"><tr><th scope="col">Site</th><th scope="col">Région</th><th scope="col" class="text-end">Incidents</th><th scope="col" class="text-end">Ouverts</th><th scope="col" class="text-end">P1</th></tr></thead>
+                    <tbody>
+                        {% for row in top_sites %}
+                            <tr>
+                                <td><strong>{{ row.site_code }}</strong> <span class="small text-body-secondary">{{ row.site_name }}</span></td>
+                                <td class="small">{{ row.region }}</td>
+                                <td class="text-end">{{ row.incident_count }}</td>
+                                <td class="text-end">{{ row.open_count }}</td>
+                                <td class="text-end">{{ row.p1_count }}</td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="5" class="text-center text-body-secondary">Aucun incident sur la période.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-body">
+                <details>
+                    <summary class="small">Requête SQL native exécutée (Doctrine DBAL)</summary>
+                    <pre class="sql-block mt-2 mb-0">{{ top_sites_sql }}</pre>
+                </details>
+            </div>
+        </section>
+    </div>
+    <div class="col-lg-5">
+        <section class="card shadow-sm" aria-labelledby="status-title">
+            <div class="card-header bg-white"><h2 id="status-title" class="h6 mb-0">Répartition par statut</h2></div>
+            <ul class="list-group list-group-flush">
+                {% for status in statuses %}
+                    <li class="list-group-item d-flex justify-content-between"><a href="{{ path('app_incident_index', {status: status.value}) }}">{{ status.label }}</a><span>{{ by_status[status.value] }}</span></li>
+                {% endfor %}
+            </ul>
+            <div class="card-body">
+                <details>
+                    <summary class="small">Temps de résolution : SQL natif propre à la plateforme</summary>
+                    <pre class="sql-block mt-2 mb-0">{{ resolution_sql }}</pre>
+                </details>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
