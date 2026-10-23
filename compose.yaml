@@ -1,0 +1,105 @@
+# NetOps — pile Docker de démonstration : nginx -> php-fpm (Symfony) -> Oracle XE 21.
+#
+#   docker compose up -d --build                          # http://127.0.0.1:8088
+#   docker compose --profile demo run --rm fixtures       # données de démonstration
+#   docker compose --profile test run --rm test           # suite PHPUnit sur Oracle
+#
+# Rien n'est en dur : chaque valeur vient de l'environnement du shell (ou d'un
+# fichier passé par `docker compose --env-file compose.env ...`, voir
+# compose.env.example). Les variables sont préfixées NETOPS_ pour ne jamais
+# entrer en collision avec le fichier .env de Symfony, que Compose lit aussi.
+# Les valeurs par défaut ci-dessous sont FACTICES, pour un poste de
+# développement uniquement. Les mots de passe sont insérés dans des URL :
+# lettres, chiffres et « _ » seulement.
+
+name: netops
+
+services:
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    environment:
+      ORACLE_PASSWORD: ${NETOPS_ORACLE_SYS_PASSWORD:-change_me_sys}
+      # Schéma applicatif, créé dans la PDB XEPDB1 au premier démarrage.
+      APP_USER: ${NETOPS_ORACLE_USER:-netops}
+      APP_USER_PASSWORD: ${NETOPS_ORACLE_PASSWORD:-change_me_app}
+      # Schéma séparé pour PHPUnit (docker/oracle/initdb/10-create-test-user.sh).
+      ORACLE_TEST_USER: ${NETOPS_ORACLE_TEST_USER:-netops_test}
+      ORACLE_TEST_PASSWORD: ${NETOPS_ORACLE_TEST_PASSWORD:-change_me_test}
+    ports:
+      # Boucle locale uniquement (SQL Developer, sqlplus...).
+      - "127.0.0.1:${NETOPS_ORACLE_PORT:-15210}:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./docker/oracle/initdb:/container-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+
+  app:
+    image: ${NETOPS_APP_IMAGE:-netops-app:local}
+    build:
+      context: .
+      target: prod
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${NETOPS_APP_SECRET:-change_me_app_secret}
+      DATABASE_URL: "oci8://${NETOPS_ORACLE_USER:-netops}:${NETOPS_ORACLE_PASSWORD:-change_me_app}@oracle:1521?servicename=${NETOPS_ORACLE_SERVICE:-XEPDB1}&charset=AL32UTF8"
+      # 1 = `doctrine:migrations:migrate` au démarrage du conteneur.
+      RUN_MIGRATIONS: ${NETOPS_RUN_MIGRATIONS:-1}
+      DB_WAIT_TIMEOUT: ${NETOPS_DB_WAIT_TIMEOUT:-180}
+    depends_on:
+      oracle:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: ${NETOPS_NGINX_IMAGE:-netops-nginx:local}
+    build:
+      context: .
+      target: nginx
+    ports:
+      - "127.0.0.1:${NETOPS_HTTP_PORT:-8088}:8080"
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Chargement (PURGE puis insertion) des fixtures de démonstration dans le
+  # schéma applicatif ; image « test » car DoctrineFixturesBundle est une
+  # dépendance de développement.
+  fixtures:
+    profiles: ["demo"]
+    image: ${NETOPS_TEST_IMAGE:-netops-test:local}
+    build:
+      context: .
+      target: test
+    environment:
+      APP_ENV: dev
+      APP_SECRET: ${NETOPS_APP_SECRET:-change_me_app_secret}
+      DATABASE_URL: "oci8://${NETOPS_ORACLE_USER:-netops}:${NETOPS_ORACLE_PASSWORD:-change_me_app}@oracle:1521?servicename=${NETOPS_ORACLE_SERVICE:-XEPDB1}&charset=AL32UTF8"
+    command: ["php", "bin/console", "doctrine:fixtures:load", "--no-interaction"]
+    depends_on:
+      oracle:
+        condition: service_healthy
+
+  # Suite PHPUnit contre Oracle, dans le schéma de test.
+  test:
+    profiles: ["test"]
+    image: ${NETOPS_TEST_IMAGE:-netops-test:local}
+    build:
+      context: .
+      target: test
+    environment:
+      APP_ENV: test
+      DATABASE_URL: "oci8://${NETOPS_ORACLE_TEST_USER:-netops_test}:${NETOPS_ORACLE_TEST_PASSWORD:-change_me_test}@oracle:1521?servicename=${NETOPS_ORACLE_SERVICE:-XEPDB1}&charset=AL32UTF8"
+    depends_on:
+      oracle:
+        condition: service_healthy
+
+volumes:
+  oracle-data:

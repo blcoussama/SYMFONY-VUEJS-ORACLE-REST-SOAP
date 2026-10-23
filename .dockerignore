@@ -1,0 +1,36 @@
+# Contexte de build Docker NetOps : seul le nécessaire entre dans l'image.
+.git
+.github
+.idea
+.vscode
+*.swp
+
+# Dépendances et fichiers générés : reconstruits dans l'image.
+/vendor/
+/node_modules/
+/var/
+/public/assets/
+/public/bundles/
+/.phpunit.cache/
+/.phpunit.result.cache
+/.php-cs-fixer.cache
+/phpstan.neon
+/phpunit.xml
+*.sqlite
+*.db
+
+# Secrets locaux : jamais dans une image (les variables passent par l'environnement).
+.env.local
+.env.local.php
+.env.*.local
+
+# Infrastructure et documentation, inutiles à l'exécution.
+/Dockerfile
+/compose*.yaml
+/compose*.env*
+/docker/oracle/
+/docs/
+!/docs/openapi.yaml
+/e2e/
+/README.md
+/LICENSE
