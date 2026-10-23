@@ -1,0 +1,502 @@
+openapi: 3.1.0
+info:
+  title: NetOps — API REST des incidents réseau
+  version: 1.0.0
+  description: |
+    API de NetOps (projet personnel de démonstration, données fictives) : consultation et création
+    d'incidents réseau par des systèmes partenaires, et transitions du cycle de vie (Workflow Symfony).
+
+    **Authentification**
+    - partenaires : en-tête `X-API-Key` (clé créée dans *Administration › Clés d'API*, stockée hachée en SHA-256) ;
+      appel sans état, aucune session ni cookie n'est créé ;
+    - application web (tableau Kanban) : cookie de session + en-tête `X-CSRF-Token` sur les requêtes d'écriture.
+
+    **Erreurs** : toujours au format RFC 7807 (`application/problem+json`).
+    `401` clé absente/invalide/révoquée · `403` droit insuffisant (rôle, technicien non assigné, CSRF) ·
+    `404` incident ou transition inconnu · `409` transition impossible dans le statut courant, règle métier
+    (compte rendu manquant) ou conflit de version (`If-Match`) · `422` données invalides (détail par champ).
+
+    **Verrou optimiste** : chaque incident porte une `version` (aussi renvoyée dans l'en-tête `ETag`).
+    Envoyer `If-Match: "<version>"` sur une transition pour refuser l'écriture si l'incident a changé.
+
+    Le même service existe en SOAP : WSDL sur `/soap/incidents?wsdl`.
+  license:
+    name: MIT
+  contact:
+    name: Code source
+    url: https://github.com/blcoussama/SYMFONY-VUEJS-ORACLE-REST-SOAP
+servers:
+  - url: http://127.0.0.1:8000
+    description: Serveur de développement local
+tags:
+  - name: Incidents
+  - name: Référentiel
+  - name: Supervision
+security:
+  - apiKey: []
+  - session: []
+
+paths:
+  /api/v1/health:
+    get:
+      tags: [Supervision]
+      summary: État du service (public)
+      security: []
+      responses:
+        '200':
+          description: Service et base de données disponibles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: Base de données indisponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /api/v1/sites:
+    get:
+      tags: [Référentiel]
+      summary: Sites actifs du réseau
+      parameters:
+        - name: region
+          in: query
+          required: false
+          schema: { type: string, example: Casablanca-Settat }
+      responses:
+        '200':
+          description: Liste des sites actifs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Site' }
+                  total: { type: integer, example: 20 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/incidents:
+    get:
+      tags: [Incidents]
+      summary: Liste paginée des incidents
+      parameters:
+        - name: status
+          in: query
+          description: Un ou plusieurs statuts séparés par des virgules.
+          schema: { type: string, example: 'NOUVEAU,QUALIFIE' }
+        - name: priority
+          in: query
+          schema: { $ref: '#/components/schemas/Priority' }
+        - name: site
+          in: query
+          description: Code du site.
+          schema: { type: string, example: TNG-0042 }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: "Page d'incidents, la création la plus récente d'abord."
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, page, limit, total, pages]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Incident' }
+                  page: { type: integer, example: 1 }
+                  limit: { type: integer, example: 20 }
+                  total: { type: integer, example: 40 }
+                  pages: { type: integer, example: 2 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Incidents]
+      summary: Déclarer un incident
+      description: |
+        Crée un incident au statut `NOUVEAU`. La priorité proposée (P3 par défaut) sera confirmée
+        par un superviseur lors de la qualification ; l'échéance SLA en découle.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateIncident' }
+            example:
+              title: Perte de lien fibre détectée par l'OSS
+              description: Alarme LOS sur le port 1/1/3 du NRO.
+              siteCode: TNG-0107
+              category: COUPURE_FIBRE
+              priority: P2
+      responses:
+        '201':
+          description: Incident créé.
+          headers:
+            Location:
+              schema: { type: string, example: /api/v1/incidents/INC-2026-000041 }
+            ETag:
+              schema: { type: string, example: '"1"' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '415':
+          description: Corps attendu en `application/json`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/v1/incidents/{reference}:
+    parameters:
+      - $ref: '#/components/parameters/Reference'
+    get:
+      tags: [Incidents]
+      summary: Détail d'un incident (journal et interventions compris)
+      responses:
+        '200':
+          description: Incident.
+          headers:
+            ETag:
+              description: Version courante (verrou optimiste).
+              schema: { type: string, example: '"3"' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/incidents/{reference}/transitions/{transition}:
+    parameters:
+      - $ref: '#/components/parameters/Reference'
+      - name: transition
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Transition' }
+    post:
+      tags: [Incidents]
+      summary: Appliquer une transition du cycle de vie
+      description: |
+        | Transition | De → vers | Qui |
+        |---|---|---|
+        | `qualifier` | NOUVEAU → QUALIFIE | superviseur (champ `priority` facultatif) |
+        | `assigner` | QUALIFIE → ASSIGNE | superviseur (champ `assignee` obligatoire) |
+        | `demarrer` | ASSIGNE → EN_COURS | technicien assigné |
+        | `mettre_en_attente` | EN_COURS → EN_ATTENTE | technicien assigné |
+        | `reprendre` | EN_ATTENTE → EN_COURS | technicien assigné |
+        | `resoudre` | EN_COURS → RESOLU | technicien assigné, compte rendu obligatoire (`report`) |
+        | `clore` | RESOLU → CLOS | superviseur |
+        | `rouvrir` | RESOLU → ASSIGNE | superviseur |
+        | `annuler` | NOUVEAU, QUALIFIE → ANNULE | superviseur, ou le partenaire qui a déclaré l'incident |
+
+        Chaque transition ajoute une entrée au journal. Le SLA n'est pas suspendu en attente.
+      parameters:
+        - name: If-Match
+          in: header
+          required: false
+          description: Version attendue de l'incident, ex. `"3"`.
+          schema: { type: string }
+        - name: X-CSRF-Token
+          in: header
+          required: false
+          description: Obligatoire pour un appel authentifié par la session (Kanban).
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransitionRequest' }
+            examples:
+              resoudre:
+                value: { report: 'Carte de transmission remplacée, liaison rétablie.' }
+              assigner:
+                value: { assignee: technicien1@netops.example, comment: Renfort de nuit }
+      responses:
+        '200':
+          description: Transition appliquée ; incident à jour.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Droit insuffisant (rôle, technicien non assigné) ou jeton CSRF manquant.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/TransitionProblem' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Transition impossible dans le statut courant, compte rendu manquant ou conflit de version.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/TransitionProblem' }
+              examples:
+                statut:
+                  value:
+                    type: https://netops.example/problems/transition-refused
+                    title: Conflit
+                    status: 409
+                    detail: Cette action n'est pas possible dans le statut actuel de l'incident.
+                    transition: clore
+                    blockers: [{ code: 19beefc8-6b1e-4716-9d07-a39bd6d16e34, message: "Cette action n'est pas possible dans le statut actuel de l'incident." }]
+                version:
+                  value:
+                    type: https://netops.example/problems/version-conflict
+                    title: Conflit
+                    status: 409
+                    detail: "L'incident a été modifié entre-temps : rechargez-le avant de recommencer."
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Clé partenaire (format `nop_` + 64 caractères hexadécimaux).
+    session:
+      type: apiKey
+      in: cookie
+      name: PHPSESSID
+      description: Session de l'application web (avec l'en-tête X-CSRF-Token en écriture).
+
+  parameters:
+    Reference:
+      name: reference
+      in: path
+      required: true
+      schema: { type: string, pattern: '^INC-\d{4}-\d{6}$', example: INC-2026-000012 }
+
+  responses:
+    BadRequest:
+      description: JSON mal formé.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Clé d'API absente, invalide ou révoquée (et pas de session).
+      headers:
+        WWW-Authenticate:
+          schema: { type: string, example: 'ApiKey header="X-API-Key"' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://netops.example/problems/unauthorized
+            title: Authentification requise
+            status: 401
+            detail: Clé d'API invalide.
+    Forbidden:
+      description: Droit insuffisant.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Incident ou transition inconnu.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ValidationError:
+      description: Données invalides, détail par champ.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ValidationProblem' }
+          example:
+            type: https://netops.example/problems/validation-error
+            title: Données invalides
+            status: 422
+            detail: Les données envoyées sont invalides.
+            violations:
+              - { field: siteCode, message: Le code du site est obligatoire. }
+
+  schemas:
+    Priority:
+      type: string
+      enum: [P1, P2, P3, P4]
+      description: 'Délai SLA de résolution par défaut : P1 = 4 h, P2 = 8 h, P3 = 24 h, P4 = 72 h.'
+    Status:
+      type: string
+      enum: [NOUVEAU, QUALIFIE, ASSIGNE, EN_COURS, EN_ATTENTE, RESOLU, CLOS, ANNULE]
+    Category:
+      type: string
+      enum: [PANNE_ENERGIE, COUPURE_FIBRE, EQUIPEMENT, RADIO, LOGICIEL, AUTRE]
+    Transition:
+      type: string
+      enum: [qualifier, assigner, demarrer, mettre_en_attente, reprendre, resoudre, clore, rouvrir, annuler]
+    DateTime:
+      type: string
+      format: date-time
+      description: Horodatage UTC (ISO 8601, suffixe Z).
+      example: '2026-10-23T12:36:00Z'
+
+    Health:
+      type: object
+      required: [status, database, time]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        database: { type: string, enum: [ok, indisponible] }
+        time: { $ref: '#/components/schemas/DateTime' }
+
+    Site:
+      type: object
+      required: [code, name, city, region, type, active]
+      properties:
+        code: { type: string, example: TNG-0042 }
+        name: { type: string, example: Tanger Ville — Boulevard Pasteur }
+        city: { type: string, example: Tanger }
+        region: { type: string, example: Tanger-Tétouan-Al Hoceïma }
+        type: { type: string, enum: [ANTENNE_4G, ANTENNE_5G, CENTRAL, FIBRE_NRO, DATACENTER] }
+        active: { type: boolean }
+
+    Sla:
+      type: object
+      required: [dueAt, state, breached, label]
+      properties:
+        dueAt: { $ref: '#/components/schemas/DateTime' }
+        state:
+          type: string
+          enum: [ON_TRACK, AT_RISK, BREACHED, MET, MISSED, NOT_APPLICABLE]
+          description: BREACHED = ouvert après l'échéance (« en dépassement »).
+        breached: { type: boolean }
+        label: { type: string, example: Reste 3 h 20 min }
+
+    Incident:
+      type: object
+      required: [reference, title, description, status, statusLabel, priority, category, source, site, reporter, assignee, sla, createdAt, updatedAt, resolvedAt, closedAt, version, allowedTransitions, _links]
+      properties:
+        reference: { type: string, example: INC-2026-000012 }
+        title: { type: string, maxLength: 150 }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/Status' }
+        statusLabel: { type: string, example: En cours }
+        priority: { $ref: '#/components/schemas/Priority' }
+        category: { $ref: '#/components/schemas/Category' }
+        source: { type: string, enum: [WEB, API_REST, API_SOAP] }
+        site: { $ref: '#/components/schemas/Site' }
+        reporter: { type: string, example: 'Partenaire : OSS Supervision Nord (démo)' }
+        assignee:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [email, name]
+              properties:
+                email: { type: string, format: email }
+                name: { type: string }
+        sla: { $ref: '#/components/schemas/Sla' }
+        createdAt: { $ref: '#/components/schemas/DateTime' }
+        updatedAt: { $ref: '#/components/schemas/DateTime' }
+        resolvedAt: { oneOf: [{ type: 'null' }, { $ref: '#/components/schemas/DateTime' }] }
+        closedAt: { oneOf: [{ type: 'null' }, { $ref: '#/components/schemas/DateTime' }] }
+        version: { type: integer, description: Verrou optimiste, example: 3 }
+        allowedTransitions:
+          type: array
+          description: Transitions possibles pour l'appelant (statut et gardes du Workflow).
+          items: { $ref: '#/components/schemas/Transition' }
+        _links:
+          type: object
+          properties:
+            self: { type: string, example: /api/v1/incidents/INC-2026-000012 }
+            html: { type: string, example: /incidents/INC-2026-000012 }
+
+    IncidentDetail:
+      allOf:
+        - $ref: '#/components/schemas/Incident'
+        - type: object
+          required: [interventions, events]
+          properties:
+            interventions:
+              type: array
+              items:
+                type: object
+                properties:
+                  technician: { type: string }
+                  plannedAt: { $ref: '#/components/schemas/DateTime' }
+                  startedAt: { oneOf: [{ type: 'null' }, { $ref: '#/components/schemas/DateTime' }] }
+                  endedAt: { oneOf: [{ type: 'null' }, { $ref: '#/components/schemas/DateTime' }] }
+                  durationMinutes: { type: [integer, 'null'] }
+                  report: { type: [string, 'null'], maxLength: 2000 }
+            events:
+              type: array
+              description: Journal immuable, ordre chronologique.
+              items:
+                type: object
+                properties:
+                  type: { type: string, enum: [CREATION, TRANSITION, ASSIGNATION, COMMENTAIRE, PRIORITE] }
+                  from: { oneOf: [{ type: 'null' }, { $ref: '#/components/schemas/Status' }] }
+                  to: { oneOf: [{ type: 'null' }, { $ref: '#/components/schemas/Status' }] }
+                  author: { type: string }
+                  comment: { type: [string, 'null'] }
+                  at: { $ref: '#/components/schemas/DateTime' }
+
+    CreateIncident:
+      type: object
+      required: [title, description, siteCode, category]
+      properties:
+        title: { type: string, minLength: 5, maxLength: 150 }
+        description: { type: string, minLength: 10, maxLength: 4000 }
+        siteCode: { type: string, description: Code d'un site actif, example: TNG-0107 }
+        category: { $ref: '#/components/schemas/Category' }
+        priority:
+          allOf: [{ $ref: '#/components/schemas/Priority' }]
+          description: Priorité suggérée (P3 si absente).
+
+    TransitionRequest:
+      type: object
+      properties:
+        comment: { type: string, maxLength: 1000 }
+        assignee: { type: string, format: email, description: '« assigner » : e-mail du technicien.' }
+        report: { type: string, maxLength: 2000, description: '« résoudre » : compte rendu d’intervention.' }
+        priority:
+          allOf: [{ $ref: '#/components/schemas/Priority' }]
+          description: '« qualifier » : priorité confirmée.'
+
+    Problem:
+      type: object
+      description: RFC 7807 (application/problem+json).
+      required: [type, title, status, detail]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+
+    ValidationProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [violations]
+          properties:
+            violations:
+              type: array
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+
+    TransitionProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            transition: { $ref: '#/components/schemas/Transition' }
+            blockers:
+              type: array
+              items:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    description: '`netops.forbidden`, `netops.report_required` ou code du Workflow Symfony.'
+                  message: { type: string }
