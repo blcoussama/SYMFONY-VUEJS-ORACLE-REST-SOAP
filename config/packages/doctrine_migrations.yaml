@@ -1,0 +1,9 @@
+doctrine_migrations:
+    migrations_paths:
+        # Une migration par plateforme (SQLite, PostgreSQL, Oracle) : chacune se désactive
+        # par skipIf() quand la base courante n'est pas la sienne.
+        'DoctrineMigrations': '%kernel.project_dir%/migrations'
+    storage:
+        table_storage:
+            table_name: 'nop_migration_versions'
+    enable_profiler: false

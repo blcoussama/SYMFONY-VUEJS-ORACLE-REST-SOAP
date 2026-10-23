@@ -1,0 +1,13 @@
+twig:
+    file_name_pattern: '*.twig'
+    form_themes: ['bootstrap_5_layout.html.twig']
+    # Les dates sont stockées en UTC et affichées à l'heure du Maroc.
+    date:
+        timezone: 'Africa/Casablanca'
+        format: 'd/m/Y H:i'
+    globals:
+        app_name: 'NetOps'
+
+when@test:
+    twig:
+        strict_variables: true

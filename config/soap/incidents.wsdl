@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NetOps — service SOAP des incidents, version 1 (document/literal « wrapped », SOAP 1.1).
+  Rédigé à la main et versionné. L'adresse du service (__SOAP_LOCATION__) est remplacée
+  à la volée par l'URL réelle quand le WSDL est servi sur /soap/incidents?wsdl.
+
+  Authentification : en-tête SOAP <ApiKey> (ou en-tête HTTP X-API-Key).
+  Fautes : faultcode Client.Unauthorized | Client.NotFound | Client.Validation | Server.
+-->
+<wsdl:definitions name="NetOpsIncidents"
+                  targetNamespace="urn:netops:incidents:v1"
+                  xmlns:tns="urn:netops:incidents:v1"
+                  xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+                  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+                  xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+    <wsdl:documentation>Consultation et création d'incidents réseau NetOps par les systèmes partenaires.</wsdl:documentation>
+
+    <wsdl:types>
+        <xsd:schema targetNamespace="urn:netops:incidents:v1" elementFormDefault="qualified">
+
+            <xsd:simpleType name="Priority">
+                <xsd:restriction base="xsd:string">
+                    <xsd:enumeration value="P1"/>
+                    <xsd:enumeration value="P2"/>
+                    <xsd:enumeration value="P3"/>
+                    <xsd:enumeration value="P4"/>
+                </xsd:restriction>
+            </xsd:simpleType>
+
+            <xsd:simpleType name="Category">
+                <xsd:restriction base="xsd:string">
+                    <xsd:enumeration value="PANNE_ENERGIE"/>
+                    <xsd:enumeration value="COUPURE_FIBRE"/>
+                    <xsd:enumeration value="EQUIPEMENT"/>
+                    <xsd:enumeration value="RADIO"/>
+                    <xsd:enumeration value="LOGICIEL"/>
+                    <xsd:enumeration value="AUTRE"/>
+                </xsd:restriction>
+            </xsd:simpleType>
+
+            <xsd:simpleType name="Status">
+                <xsd:restriction base="xsd:string">
+                    <xsd:enumeration value="NOUVEAU"/>
+                    <xsd:enumeration value="QUALIFIE"/>
+                    <xsd:enumeration value="ASSIGNE"/>
+                    <xsd:enumeration value="EN_COURS"/>
+                    <xsd:enumeration value="EN_ATTENTE"/>
+                    <xsd:enumeration value="RESOLU"/>
+                    <xsd:enumeration value="CLOS"/>
+                    <xsd:enumeration value="ANNULE"/>
+                </xsd:restriction>
+            </xsd:simpleType>
+
+            <xsd:complexType name="IncidentInfo">
+                <xsd:sequence>
+                    <xsd:element name="reference" type="xsd:string"/>
+                    <xsd:element name="title" type="xsd:string"/>
+                    <xsd:element name="status" type="tns:Status"/>
+                    <xsd:element name="priority" type="tns:Priority"/>
+                    <xsd:element name="siteCode" type="xsd:string"/>
+                    <xsd:element name="slaDueAt" type="xsd:dateTime"/>
+                    <xsd:element name="slaBreached" type="xsd:boolean"/>
+                    <xsd:element name="technician" type="xsd:string" minOccurs="0"/>
+                </xsd:sequence>
+            </xsd:complexType>
+
+            <!-- En-tête d'authentification -->
+            <xsd:element name="ApiKey" type="xsd:string"/>
+
+            <xsd:element name="getIncidentStatus">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="reference" type="xsd:string"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="getIncidentStatusResponse">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="incident" type="tns:IncidentInfo"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+
+            <xsd:element name="createIncident">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="siteCode" type="xsd:string"/>
+                        <xsd:element name="title" type="xsd:string"/>
+                        <xsd:element name="description" type="xsd:string"/>
+                        <xsd:element name="category" type="tns:Category"/>
+                        <xsd:element name="priority" type="tns:Priority"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="createIncidentResponse">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="reference" type="xsd:string"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+
+            <xsd:element name="listOpenIncidentsBySite">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="siteCode" type="xsd:string"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="listOpenIncidentsBySiteResponse">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="incident" type="tns:IncidentInfo" minOccurs="0" maxOccurs="unbounded"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+
+            <!-- Détail des fautes SOAP -->
+            <xsd:element name="ServiceFault">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="code" type="xsd:string"/>
+                        <xsd:element name="message" type="xsd:string"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+        </xsd:schema>
+    </wsdl:types>
+
+    <wsdl:message name="ApiKeyHeader">
+        <wsdl:part name="ApiKey" element="tns:ApiKey"/>
+    </wsdl:message>
+    <wsdl:message name="getIncidentStatusRequest">
+        <wsdl:part name="parameters" element="tns:getIncidentStatus"/>
+    </wsdl:message>
+    <wsdl:message name="getIncidentStatusResponse">
+        <wsdl:part name="parameters" element="tns:getIncidentStatusResponse"/>
+    </wsdl:message>
+    <wsdl:message name="createIncidentRequest">
+        <wsdl:part name="parameters" element="tns:createIncident"/>
+    </wsdl:message>
+    <wsdl:message name="createIncidentResponse">
+        <wsdl:part name="parameters" element="tns:createIncidentResponse"/>
+    </wsdl:message>
+    <wsdl:message name="listOpenIncidentsBySiteRequest">
+        <wsdl:part name="parameters" element="tns:listOpenIncidentsBySite"/>
+    </wsdl:message>
+    <wsdl:message name="listOpenIncidentsBySiteResponse">
+        <wsdl:part name="parameters" element="tns:listOpenIncidentsBySiteResponse"/>
+    </wsdl:message>
+    <wsdl:message name="ServiceFault">
+        <wsdl:part name="fault" element="tns:ServiceFault"/>
+    </wsdl:message>
+
+    <wsdl:portType name="IncidentPortType">
+        <wsdl:operation name="getIncidentStatus">
+            <wsdl:documentation>Statut, priorité, échéance SLA et technicien d'un incident.</wsdl:documentation>
+            <wsdl:input message="tns:getIncidentStatusRequest"/>
+            <wsdl:output message="tns:getIncidentStatusResponse"/>
+            <wsdl:fault name="ServiceFault" message="tns:ServiceFault"/>
+        </wsdl:operation>
+        <wsdl:operation name="createIncident">
+            <wsdl:documentation>Déclare un incident ; renvoie sa référence INC-AAAA-NNNNNN.</wsdl:documentation>
+            <wsdl:input message="tns:createIncidentRequest"/>
+            <wsdl:output message="tns:createIncidentResponse"/>
+            <wsdl:fault name="ServiceFault" message="tns:ServiceFault"/>
+        </wsdl:operation>
+        <wsdl:operation name="listOpenIncidentsBySite">
+            <wsdl:documentation>Incidents ouverts d'un site, par priorité.</wsdl:documentation>
+            <wsdl:input message="tns:listOpenIncidentsBySiteRequest"/>
+            <wsdl:output message="tns:listOpenIncidentsBySiteResponse"/>
+            <wsdl:fault name="ServiceFault" message="tns:ServiceFault"/>
+        </wsdl:operation>
+    </wsdl:portType>
+
+    <wsdl:binding name="IncidentBinding" type="tns:IncidentPortType">
+        <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+        <wsdl:operation name="getIncidentStatus">
+            <soap:operation soapAction="urn:netops:incidents:v1#getIncidentStatus"/>
+            <wsdl:input>
+                <soap:header message="tns:ApiKeyHeader" part="ApiKey" use="literal"/>
+                <soap:body use="literal"/>
+            </wsdl:input>
+            <wsdl:output>
+                <soap:body use="literal"/>
+            </wsdl:output>
+            <wsdl:fault name="ServiceFault">
+                <soap:fault name="ServiceFault" use="literal"/>
+            </wsdl:fault>
+        </wsdl:operation>
+        <wsdl:operation name="createIncident">
+            <soap:operation soapAction="urn:netops:incidents:v1#createIncident"/>
+            <wsdl:input>
+                <soap:header message="tns:ApiKeyHeader" part="ApiKey" use="literal"/>
+                <soap:body use="literal"/>
+            </wsdl:input>
+            <wsdl:output>
+                <soap:body use="literal"/>
+            </wsdl:output>
+            <wsdl:fault name="ServiceFault">
+                <soap:fault name="ServiceFault" use="literal"/>
+            </wsdl:fault>
+        </wsdl:operation>
+        <wsdl:operation name="listOpenIncidentsBySite">
+            <soap:operation soapAction="urn:netops:incidents:v1#listOpenIncidentsBySite"/>
+            <wsdl:input>
+                <soap:header message="tns:ApiKeyHeader" part="ApiKey" use="literal"/>
+                <soap:body use="literal"/>
+            </wsdl:input>
+            <wsdl:output>
+                <soap:body use="literal"/>
+            </wsdl:output>
+            <wsdl:fault name="ServiceFault">
+                <soap:fault name="ServiceFault" use="literal"/>
+            </wsdl:fault>
+        </wsdl:operation>
+    </wsdl:binding>
+
+    <wsdl:service name="IncidentService">
+        <wsdl:port name="IncidentPort" binding="tns:IncidentBinding">
+            <soap:address location="__SOAP_LOCATION__"/>
+        </wsdl:port>
+    </wsdl:service>
+</wsdl:definitions>

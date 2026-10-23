@@ -1,0 +1,61 @@
+# Cycle de vie d'un incident (machine à états). Les gardes métier (rôle, technicien
+# assigné, compte rendu obligatoire) sont dans App\Workflow\IncidentGuardListener ;
+# le journal (IncidentEvent) et les horodatages dans App\Workflow\IncidentWorkflowSubscriber.
+framework:
+    workflows:
+        incident:
+            type: state_machine
+            audit_trail:
+                enabled: false
+            marking_store:
+                type: method
+                property: status
+            supports:
+                - App\Entity\Incident
+            initial_marking: NOUVEAU
+            places:
+                NOUVEAU: { metadata: { label: 'Nouveau' } }
+                QUALIFIE: { metadata: { label: 'Qualifié' } }
+                ASSIGNE: { metadata: { label: 'Assigné' } }
+                EN_COURS: { metadata: { label: 'En cours' } }
+                EN_ATTENTE: { metadata: { label: 'En attente' } }
+                RESOLU: { metadata: { label: 'Résolu' } }
+                CLOS: { metadata: { label: 'Clos' } }
+                ANNULE: { metadata: { label: 'Annulé' } }
+            transitions:
+                qualifier:
+                    from: NOUVEAU
+                    to: QUALIFIE
+                    metadata: { label: 'Qualifier', actor: superviseur, style: primary }
+                assigner:
+                    from: QUALIFIE
+                    to: ASSIGNE
+                    metadata: { label: 'Assigner', actor: superviseur, style: primary }
+                demarrer:
+                    from: ASSIGNE
+                    to: EN_COURS
+                    metadata: { label: 'Démarrer', actor: technicien, style: primary }
+                mettre_en_attente:
+                    from: EN_COURS
+                    to: EN_ATTENTE
+                    metadata: { label: 'Mettre en attente', actor: technicien, style: secondary }
+                reprendre:
+                    from: EN_ATTENTE
+                    to: EN_COURS
+                    metadata: { label: 'Reprendre', actor: technicien, style: primary }
+                resoudre:
+                    from: EN_COURS
+                    to: RESOLU
+                    metadata: { label: 'Résoudre', actor: technicien, style: success }
+                clore:
+                    from: RESOLU
+                    to: CLOS
+                    metadata: { label: 'Clore', actor: superviseur, style: success }
+                rouvrir:
+                    from: RESOLU
+                    to: ASSIGNE
+                    metadata: { label: 'Rouvrir', actor: superviseur, style: warning }
+                annuler:
+                    from: [NOUVEAU, QUALIFIE]
+                    to: ANNULE
+                    metadata: { label: 'Annuler', actor: superviseur, style: danger }

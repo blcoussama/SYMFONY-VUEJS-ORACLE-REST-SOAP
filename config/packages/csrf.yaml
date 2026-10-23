@@ -1,0 +1,9 @@
+# Protection CSRF « classique » (jeton stocké en session) pour tous les formulaires,
+# la connexion, la déconnexion, les boutons de transition et les appels de l'API REST
+# faits depuis le navigateur (en-tête X-CSRF-Token du tableau Kanban).
+framework:
+    form:
+        csrf_protection:
+            enabled: true
+    csrf_protection:
+        enabled: true

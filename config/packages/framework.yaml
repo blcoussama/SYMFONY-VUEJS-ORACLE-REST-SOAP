@@ -1,0 +1,22 @@
+# see https://symfony.com/doc/current/reference/configuration/framework.html
+framework:
+    secret: '%env(APP_SECRET)%'
+
+    # La session ne démarre que si elle est lue ou écrite (pas pour les appels API par clé).
+    session:
+        cookie_secure: auto
+        cookie_samesite: lax
+        cookie_httponly: true
+
+    http_method_override: false
+    handle_all_throwables: true
+
+    # Les appels partenaires passent par X-API-Key ; aucune page n'est servie dans une iframe.
+    php_errors:
+        log: true
+
+when@test:
+    framework:
+        test: true
+        session:
+            storage_factory_id: session.storage.factory.mock_file

@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
+
+parameters:
+    # Valeurs par défaut des variables d'environnement : l'application démarre sans
+    # fichier .env (SQLite dans var/). Toute variable réelle les remplace.
+    env(DATABASE_URL): 'sqlite:///%kernel.project_dir%/var/data_%kernel.environment%.db'
+    env(DEFAULT_URI): 'http://127.0.0.1:8000'
+    env(SLA_HOURS_P1): '4'
+    env(SLA_HOURS_P2): '8'
+    env(SLA_HOURS_P3): '24'
+    env(SLA_HOURS_P4): '72'
+    env(SOAP_WSDL_CACHE): '0'
+
+    # Délai de résolution (heures) par priorité — SPEC §3.
+    app.sla_hours:
+        P1: '%env(int:SLA_HOURS_P1)%'
+        P2: '%env(int:SLA_HOURS_P2)%'
+        P3: '%env(int:SLA_HOURS_P3)%'
+        P4: '%env(int:SLA_HOURS_P4)%'
+    app.soap.wsdl_template: '%kernel.project_dir%/config/soap/incidents.wsdl'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        bind:
+            $projectDir: '%kernel.project_dir%'
+            bool $debug: '%kernel.debug%'
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/Kernel.php'
+            - '../src/Entity/'
+            - '../src/Enum/'
+            - '../src/Dto/'
+            - '../src/Exception/'
+            - '../src/Api/Dto/'
+            - '../src/Soap/IncidentSoapEndpoint.php'
+            - '../src/Soap/SoapServiceException.php'
+            - '../src/Service/Actor.php'
+            - '../src/Service/Sla/SlaAssessment.php'
+
+    App\Service\Sla\SlaPolicy:
+        arguments:
+            $hoursByPriority: '%app.sla_hours%'
+
+    App\Soap\WsdlProvider:
+        arguments:
+            $templatePath: '%app.soap.wsdl_template%'
+            $cacheDir: '%kernel.cache_dir%/soap'
+
+    App\Soap\IncidentSoapServer:
+        arguments:
+            $wsdlCache: '%env(int:SOAP_WSDL_CACHE)%'
+
+when@dev:
+    parameters:
+        # Secret de développement NON confidentiel ; en production APP_SECRET est obligatoire.
+        env(APP_SECRET): 'dev-only-not-a-secret-change-me'
+        env(VAR_DUMPER_SERVER): '127.0.0.1:9912'
+
+when@test:
+    parameters:
+        env(APP_SECRET): 'test-only-not-a-secret'
