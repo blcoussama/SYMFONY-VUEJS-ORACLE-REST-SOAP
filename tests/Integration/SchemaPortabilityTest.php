@@ -1,0 +1,125 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration;
+
+use Doctrine\DBAL\Platforms\Keywords\OracleKeywords;
+use Doctrine\DBAL\Platforms\Keywords\PostgreSQLKeywords;
+use Doctrine\DBAL\Platforms\OraclePlatform;
+use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
+use Doctrine\DBAL\Schema\Schema;
+use Doctrine\DBAL\Types\TextType;
+use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Tools\SchemaTool;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+/**
+ * Garde-fous de portabilité Oracle : le schéma généré par le mapping Doctrine doit rester
+ * valable sur Oracle (identifiants ≤ 30 caractères, aucun mot réservé, pas de CLOB indexé).
+ */
+final class SchemaPortabilityTest extends KernelTestCase
+{
+    private static function schema(): Schema
+    {
+        self::bootKernel();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        \assert($em instanceof EntityManagerInterface);
+
+        return (new SchemaTool($em))->getSchemaFromMetadata($em->getMetadataFactory()->getAllMetadata());
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function identifiers(Schema $schema): array
+    {
+        $names = [];
+        foreach ($schema->getTables() as $table) {
+            $names[] = $table->getName();
+            foreach ($table->getColumns() as $column) {
+                $names[] = $column->getName();
+            }
+            foreach ($table->getIndexes() as $index) {
+                // L'index primaire porte un nom interne à DBAL (« primary »), jamais émis tel quel.
+                if (!$index->isPrimary()) {
+                    $names[] = $index->getName();
+                }
+            }
+            foreach ($table->getForeignKeys() as $fk) {
+                $names[] = $fk->getName();
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    public function testAllTablesArePrefixed(): void
+    {
+        foreach (self::schema()->getTables() as $table) {
+            self::assertStringStartsWith('nop_', $table->getName());
+        }
+    }
+
+    public function testIdentifiersFitOracleLimit(): void
+    {
+        foreach (self::identifiers(self::schema()) as $name) {
+            self::assertLessThanOrEqual(30, \strlen($name), "Identifiant trop long pour Oracle : $name");
+        }
+    }
+
+    public function testNoReservedWords(): void
+    {
+        $oracle = new OracleKeywords();
+        $postgres = new PostgreSQLKeywords();
+        foreach (self::identifiers(self::schema()) as $name) {
+            self::assertFalse($oracle->isKeyword($name), "Mot réservé Oracle : $name");
+            self::assertFalse($postgres->isKeyword($name), "Mot réservé PostgreSQL : $name");
+        }
+    }
+
+    public function testLongTextColumnsAreNeverIndexed(): void
+    {
+        foreach (self::schema()->getTables() as $table) {
+            foreach ($table->getIndexes() as $index) {
+                foreach ($index->getColumns() as $column) {
+                    self::assertNotInstanceOf(TextType::class, $table->getColumn($column)->getType(), "CLOB/TEXT indexé : {$table->getName()}.$column");
+                }
+            }
+        }
+    }
+
+    public function testVarcharLengthsAreExplicitAndFitOracle(): void
+    {
+        foreach (self::schema()->getTables() as $table) {
+            foreach ($table->getColumns() as $column) {
+                if ('string' === \Doctrine\DBAL\Types\Type::getTypeRegistry()->lookupName($column->getType())) {
+                    self::assertNotNull($column->getLength(), "Longueur implicite : {$table->getName()}.{$column->getName()}");
+                    self::assertLessThanOrEqual(4000, $column->getLength());
+                }
+            }
+        }
+    }
+
+    public function testSchemaCanBeGeneratedForOracleAndPostgreSql(): void
+    {
+        $schema = self::schema();
+        $oracleSql = implode(";\n", $schema->toSql(new OraclePlatform()));
+        $pgSql = implode(";\n", $schema->toSql(new PostgreSQLPlatform()));
+
+        self::assertStringContainsString('CREATE TABLE nop_incident', $oracleSql);
+        self::assertStringContainsString('description CLOB NOT NULL', $oracleSql);
+        self::assertStringContainsString('sla_due_at TIMESTAMP(0) NOT NULL', $oracleSql);
+        self::assertStringContainsString('is_active NUMBER(1) NOT NULL', $oracleSql);
+
+        // La stratégie d'identifiant (AUTO) est résolue pour la base réellement connectée : SEQUENCE
+        // sur Oracle (nop_incident_id_seq, alors émise pour toutes les plateformes), IDENTITY ailleurs.
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        \assert($em instanceof EntityManagerInterface);
+        if ($em->getConnection()->getDatabasePlatform() instanceof OraclePlatform) {
+            self::assertStringContainsString('CREATE SEQUENCE nop_incident_id_seq', $oracleSql);
+        } else {
+            self::assertStringContainsString('GENERATED BY DEFAULT AS IDENTITY', $pgSql);
+        }
+    }
+}
